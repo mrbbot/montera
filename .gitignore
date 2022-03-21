@@ -1,0 +1,14 @@
+# IDE project files
+/.idea
+
+# Compiled Rust files
+/target
+
+# Test Java source files
+/java
+# Test Java compiled WebAssembly files
+/wasm
+# Rendered intermediate Graphviz graphs
+/graphs
+# Test WebAssembly runner
+/runner.mjs
