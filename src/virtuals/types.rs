@@ -72,7 +72,7 @@ impl VirtualTable {
         let mut inheritance_tree = construct_inheritance_tree(classes);
 
         // Add all possible methods that could be called on a class to the tree
-        let root = inheritance_tree.entry_id().unwrap();
+        let root = inheritance_tree.entry.unwrap();
         populate_tree_methods(classes, &mut inheritance_tree, root, vec![]);
 
         // Build the class_indices map with entries mapping class names to IDs in the graph and

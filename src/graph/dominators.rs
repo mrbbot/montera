@@ -22,7 +22,7 @@ fn intersect(
 
 impl<T> Graph<T> {
     pub fn immediate_dominators(&self) -> HashMap<NodeId, NodeId> {
-        let start = self.entry_id().expect("dominators needs entrypoint");
+        let start = self.entry.expect("dominators needs entrypoint");
 
         let post_order = self.depth_first(Order::PostOrder);
         let mut reverse_post_order_traversal = post_order.traversal.clone();

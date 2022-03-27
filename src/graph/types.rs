@@ -2,7 +2,7 @@ use std::mem::take;
 use std::{fmt, ops};
 
 #[inline]
-fn remove_element<T: PartialEq + Copy>(vec: &mut Vec<T>, value: T) {
+pub fn remove_element<T: PartialEq + Copy>(vec: &mut Vec<T>, value: T) {
     let index = vec.iter().position(|&x| x == value).expect("Not found");
     vec.remove(index);
 }
@@ -47,6 +47,7 @@ pub struct Graph<T> {
     // Nodes are deleted infrequently, so store deletions as `None` tombstones.
     // This gives us constant time lookup by NodeId.
     nodes: Vec<Option<Node<T>>>,
+    pub entry: Option<NodeId>,
 }
 
 impl<T> ops::Index<NodeId> for Graph<T> {
@@ -78,7 +79,10 @@ impl<T> IntoIterator for Graph<T> {
 
 impl<T> Graph<T> {
     pub fn new() -> Self {
-        Self { nodes: vec![] }
+        Self {
+            nodes: vec![],
+            entry: None,
+        }
     }
 
     pub fn add_node(&mut self, value: T) -> NodeId {
@@ -90,6 +94,10 @@ impl<T> Graph<T> {
             successors: vec![],
         };
         self.nodes.push(Some(node));
+
+        // Set as entrypoint if this is the first inserted node
+        self.entry.get_or_insert(id);
+
         id
     }
 
@@ -144,11 +152,6 @@ impl<T> Graph<T> {
         self.iter().count()
     }
 
-    #[inline]
-    pub fn entry_id(&self) -> Option<NodeId> {
-        self.iter_id().next()
-    }
-
     pub fn map<U, F: Fn(NodeId, &T) -> U>(&self, f: F) -> Graph<U> {
         let nodes = self
             .nodes
@@ -162,7 +165,10 @@ impl<T> Graph<T> {
                 })
             })
             .collect();
-        Graph { nodes }
+        Graph {
+            nodes,
+            entry: self.entry,
+        }
     }
 }
 

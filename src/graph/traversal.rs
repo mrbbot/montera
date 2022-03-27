@@ -86,7 +86,7 @@ impl<T> Graph<T> {
         let mut traversal = Vec::with_capacity(len);
         let mut visited = HashSet::with_capacity(len);
 
-        let start = self.entry_id().expect("traversal needs entrypoint");
+        let start = self.entry.expect("traversal needs entrypoint");
         visited.insert(start);
 
         self.depth_first_inner(order, &mut traversal, &mut visited, start);

@@ -23,7 +23,11 @@ impl<T: Debug> Graph<T> {
             let label = if opts.omit_node_ids {
                 format!("{value:?}", value=node.value)
             } else {
-                format!("{id}\\n{value:?}", id = node.id, value = node.value)
+                let entry = match self.entry {
+                    Some(id) if id == node.id => "*",
+                    _ => "",
+                };
+                format!("{id}{entry}\\n{value:?}", id = node.id, value = node.value)
             };
             let node_string = format!(
                 "  {prefix}{id} [label=\"{label}\",shape=\"box\",{FONT_NAME},{FONT_SIZE}];", 

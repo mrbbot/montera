@@ -29,7 +29,7 @@ impl<T> Graph<T> {
     #[allow(non_snake_case)]
     pub fn intervals(&self) -> Vec<Interval> {
         let len = self.len();
-        let start = self.entry_id().expect("intervals needs entrypoint");
+        let start = self.entry.expect("intervals needs entrypoint");
 
         let mut I = vec![];
         let mut H = vec![start];
