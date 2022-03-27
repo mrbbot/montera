@@ -35,7 +35,7 @@ fn is_reducible(G: &[Graph<Vec<NodeId>>]) -> bool {
         .last()
         .expect("Unable to find last derived sequence graph");
     let last_start = last
-        .entry_id()
+        .entry
         .expect("Unable to find last derived sequence graph entrypoint");
     last.len() == 1 && last[last_start].successors.is_empty()
 }

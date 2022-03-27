@@ -389,7 +389,7 @@ impl Visitor {
         match loop_info.kind {
             LoopKind::PreTested => {
                 let header = &self.code.g[loop_info.header];
-                assert_eq!(header.out_degree(), 2);
+                assert_eq!(header.out_degree(), 2); // Header should be 2-way conditional
 
                 // If this is a pre-tested loop, the condition is in the header, so evaluate it
                 self.visit_node(out, header);
@@ -403,15 +403,15 @@ impl Visitor {
                     out.push(I(WASMInstruction::BrIf(0)));
                     // No need for explicit Br(1) as we'll fall out of the block naturally
                 } else {
-                    // Otherwise, break out of the loop if the condition is true
+                    // Follow should be true branch of header conditional...
+                    assert_eq!(header.successors[1], loop_info.follow);
+                    // ...so the body should be the false branch
+                    let body = header.successors[0];
+
+                    // Otherwise, break out of the loop if the header condition is true
                     out.push(I(WASMInstruction::BrIf(1)));
 
                     // Run the loop body (not the follow node), until we return to the header
-                    let body = if header.successors[0] == loop_info.follow {
-                        header.successors[1]
-                    } else {
-                        header.successors[0]
-                    };
                     self.visit_until(out, body, Some(loop_info.header), false);
 
                     // ...then branch back to the start of the loop
@@ -420,7 +420,7 @@ impl Visitor {
             }
             LoopKind::PostTested => {
                 let latching = &self.code.g[loop_info.latching];
-                assert_eq!(latching.out_degree(), 2);
+                assert_eq!(latching.out_degree(), 2); // Latching should be 2-way conditional
 
                 // If this is a post-tested loop, the condition is in the latching node, so visit
                 // all nodes up to it, making sure not to treat the first node as a loop (`true`)
@@ -428,20 +428,15 @@ impl Visitor {
                 self.visit_until(out, loop_info.header, Some(loop_info.latching), true);
                 // ...then evaluate the latching condition
                 self.visit_node(out, latching);
-                // ...then break out of the loop if the condition is true
-                out.push(I(WASMInstruction::BrIf(1)));
 
-                // Run the rest of the loop body up to the header
-                // TODO: is this ever the case, or would that be endless only?
-                let rest = if latching.successors[0] == loop_info.follow {
-                    latching.successors[1]
-                } else {
-                    latching.successors[0]
-                };
-                self.visit_until(out, rest, Some(loop_info.header), false);
-
-                // ...then branch back to the start of the loop
-                out.push(I(WASMInstruction::Br(0)));
+                // Follow should be false branch of latching conditional...
+                assert_eq!(latching.successors[0], loop_info.follow);
+                // ...and the header should be the true branch...
+                assert_eq!(latching.successors[1], loop_info.header);
+                // ...so branch back to the start of the loop if the latching condition is true...
+                out.push(I(WASMInstruction::BrIf(0)));
+                // ...and break out of the loop otherwise.
+                // No need for explicit Br(1) as we'll fall out of the block naturally
             }
         }
 
@@ -506,7 +501,7 @@ impl Visitor {
     }
 
     pub fn visit_all(&self, out: &mut Vec<Instruction<'_>>) {
-        let start = self.code.g.entry_id().expect("visit_all needs entrypoint");
+        let start = self.code.g.entry.expect("visit_all needs entrypoint");
         self.visit_until(out, start, None, false);
         out.push(I(WASMInstruction::End));
     }
