@@ -1,11 +1,9 @@
 use crate::function::structure::ConditionalKind;
-use crate::graph::{Graph, NodeId, Order};
+use crate::graph::{remove_element, Graph, NodeId, NodeOrder, Order};
 use classfile_parser::code_attribute::Instruction as JVMInstruction;
-use itertools::Itertools;
 use std::collections::HashMap;
 use std::fmt;
 
-#[derive(Clone)]
 pub enum Structure {
     Block(Vec<JVMInstruction>),
     CompoundConditional {
@@ -162,31 +160,93 @@ impl ControlFlowGraph {
         }
     }
 
-    pub fn insert_dummy_nodes(&mut self) {
-        // Whenever there is a node with 2 or more back edges to it, insert a dummy node and
-        // connect the back edges to it instead, then connect it to the original node.
-        // This ensures a 2-way conditional's follow node is never a loop header. This breaks the
-        // loop structuring algorithm, as it requires each loop to have a single back edge.
+    fn find_latching_nodes_for(&self, post_order: &NodeOrder, header: NodeId) -> Vec<NodeId> {
+        self[header]
+            .predecessors
+            .iter()
+            .filter(|&&x| post_order.cmp(x, header).is_lt())
+            .copied()
+            .collect()
+    }
+
+    pub fn insert_placeholder_nodes(&mut self) {
+        // Whenever there is a node with 2 or more back edges to it, we've got a problem.
+        // The loop structuring algorithm requires a unique back edge for each loop.
+        //
+        // There are 2 cases where this will happen:
+        //
+        // 1. A pre and post-tested loop share a header node, with the post-tested 2-way latching
+        //    node having a back edge to the header and an edge to the follow.
+        //    (e.g. pre-tested at start of post-tested body, `do { while(...) {...} } while(...)` )
+        // 2. A 2-way conditional has a follow node as a loop header, meaning the 2 branches
+        //    converge via back edges.
+        //    (e.g. if-else at end of pre-tested body, `while(...) { if(...) {...} else {...} }`)
+        //
+
+        // We iterate in post-order, handling nested structures first. We do the traversal once at
+        // the start to make sure we ignore placeholder nodes added by this function.
         let post_order = self.depth_first(Order::PostOrder);
-        for &i in &post_order.traversal {
-            let latching = self[i]
-                .predecessors
-                .iter()
-                .filter(|&&j| post_order.cmp(j, i).is_lt())
-                .copied()
-                .collect_vec();
+        for &header in &post_order.traversal {
+            // Find all latching nodes with back edges to the header
+            let mut latching = self.find_latching_nodes_for(&post_order, header);
 
             if latching.len() >= 2 {
-                let dummy = self.add_node(Structure::Block(vec![]));
+                // Case 1: check if any latching node is a 2-way conditional. If it is, we've got
+                // a post-tested loop. To fix this, we insert a new placeholder node above the
+                // header node, reconnect the back edge to that, then connect it to the header node.
+                // If the header node was the entry point, this is updated to the placeholder.
+                // This creates a new interval, ensuring the derived sequence of intervals properly
+                // captures the loop nesting order, and maintains the property of a single loop per
+                // interval.
 
-                // Re-connect all of node's back edges to dummy
-                for l in latching {
-                    self.remove_edge(l, i);
-                    self.add_edge(l, dummy);
+                let mut conditional_latchings =
+                    latching.iter().filter(|&&x| self[x].out_degree() == 2);
+                if let Some(&conditional_latching) = conditional_latchings.next() {
+                    // We don't support multi-exit loops, so make sure there's at most 1 of these.
+                    assert_eq!(conditional_latchings.next(), None);
+
+                    let placeholder = self.add_node(Structure::default());
+
+                    // Re-connect back edge to placeholder
+                    self.swap_edge(conditional_latching, header, placeholder);
+
+                    // If header is the entrypoint, update it to point to the placeholder
+                    if self.entry == Some(header) {
+                        self.entry = Some(placeholder);
+                    } else {
+                        // Otherwise, re-connect header's predecessors to placeholder.
+                        // (clone() as swap_edge will mutate header's predecessors)
+                        for pred in self[header].predecessors.clone() {
+                            self.swap_edge(pred, header, placeholder);
+                        }
+                    }
+
+                    // Connect placeholder to header
+                    self.add_edge(placeholder, header);
+
+                    // Ignore this node when checking for Case 2
+                    remove_element(&mut latching, conditional_latching);
+                }
+            }
+
+            if latching.len() >= 2 {
+                // Case 2: if we still have more than 2 latching nodes for the header, we have 2-way
+                // conditionals with loop headers as follow nodes. To fix this, insert a placeholder
+                // node and connect all back edges to it instead, then connect it to the original
+                // header node. This ensures a 2-way conditional's follow node is never a loop
+                // header.
+
+                let placeholder = self.add_node(Structure::default());
+
+                // Re-connect all remaining latching node's back edges to placeholder
+                for x in latching {
+                    // We should've handled all 2-way conditional latchings in Case 1
+                    assert_eq!(self[x].out_degree(), 1);
+                    self.swap_edge(x, header, placeholder);
                 }
 
-                // Connect dummy to original node
-                self.add_edge(dummy, i);
+                // Connect placeholder to original header node
+                self.add_edge(placeholder, header);
             }
         }
     }

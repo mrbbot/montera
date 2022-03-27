@@ -27,14 +27,20 @@ pub fn structure_code(
     // Create new control flow graph and build basic blocks from function's code
     let mut g = ControlFlowGraph::new();
     g.insert_basic_blocks(code);
-    // Insert dummy nodes where nodes have 2 or more back edges to ensure each loop has a single
-    // unique back edge
-    g.insert_dummy_nodes();
+
     // Write intermediate graph if enabled
     let dot_opts = DotOptions::default();
     if let Some(graphs_dir) = graphs_dir {
         run_graphviz(&g.as_dot(&dot_opts), graphs_dir.join("basic.png"))
             .context("Unable to render basic graph")?;
+    }
+
+    // Insert dummy nodes where nodes have 2 or more back edges to ensure each loop has a single
+    // unique back edge
+    g.insert_placeholder_nodes();
+    if let Some(graphs_dir) = graphs_dir {
+        run_graphviz(&g.as_dot(&dot_opts), graphs_dir.join("placeholder.png"))
+            .context("Unable to render placeholder graph")?;
     }
 
     // Combine short-circuit conditionals in single nodes

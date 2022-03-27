@@ -130,6 +130,20 @@ impl<T> Graph<T> {
         remove_element(&mut self[target].predecessors, source);
     }
 
+    pub fn swap_edge(&mut self, source: NodeId, from_target: NodeId, to_target: NodeId) {
+        // Update target in successors of source (preserving order for conditional branches)
+        let successor = self[source]
+            .successors
+            .iter_mut()
+            .find(|x| **x == from_target)
+            .expect("Not found");
+        *successor = to_target;
+        // Remove source of predecessor of previous target...
+        remove_element(&mut self[from_target].predecessors, source);
+        // ...and add it as a predecessor of the new target
+        self[to_target].predecessors.push(source);
+    }
+
     pub fn remove_all_successors(&mut self, source: NodeId) {
         for succ in take(&mut self[source].successors) {
             remove_element(&mut self[succ].predecessors, source);
