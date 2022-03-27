@@ -91,6 +91,5 @@ impl Class {
                 }
             }
         }
-        trace!("")
     }
 }

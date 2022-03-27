@@ -20,7 +20,7 @@ pub enum Instruction<'a> {
     // Simple instructions
     I(WASMInstruction<'a>),
 
-    // Complex instructions requiring virtual method tables or built-in functions,
+    // Complex pseudo-instructions requiring virtual method tables or built-in functions,
     // lowered to simple instructions when rendering final WebAssembly module
 
     // [value: t] -> [value: t, value: t]

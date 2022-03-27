@@ -55,6 +55,8 @@ impl CompileFunctionJob {
                 };
                 visitor.visit_all(&mut out);
 
+                // TODO: instrument shadow stack here
+
                 (Some(out), Some(locals))
             }
             None => (None, None),
