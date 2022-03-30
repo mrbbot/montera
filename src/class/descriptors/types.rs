@@ -80,8 +80,8 @@ impl FunctionType {
     }
 
     pub fn dispatcher_name(&self) -> String {
-        let param_names = self.params.iter().copied().map(val_type_name).join("");
-        let result_names = self.results.iter().copied().map(val_type_name).join("");
+        let param_names = self.params.iter().copied().map(val_type_name).format("");
+        let result_names = self.results.iter().copied().map(val_type_name).format("");
         format!("!Dispatcher_{}_{}", param_names, result_names)
     }
 }
