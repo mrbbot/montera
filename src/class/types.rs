@@ -25,6 +25,14 @@ pub struct MethodId {
     pub descriptor: Arc<MethodDescriptor>,
 }
 
+impl MethodId {
+    pub fn name(&self) -> String {
+        let params = self.descriptor.params.iter().format("");
+        let returns = &self.descriptor.returns;
+        format!("{}.{}_{}_{}", self.class_name, self.name, params, returns)
+    }
+}
+
 impl fmt::Display for MethodId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}.{}{}", self.class_name, self.name, self.descriptor)
@@ -67,7 +75,7 @@ impl Class {
         );
         trace!("  Constant Pool:");
         for (i, const_info) in (&self.const_pool.iter()).into_iter().enumerate() {
-            trace!("{:>6}: {:?}", i + 1, const_info);
+            trace!("{:>6}: {:?}", i, const_info);
         }
         if !self.field_offsets.is_empty() {
             trace!("  Fields:");

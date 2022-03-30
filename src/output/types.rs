@@ -2,9 +2,16 @@ use crate::output::ensure::Ensurable;
 use std::collections::HashMap;
 use wasm_encoder::{
     CodeSection, ElementSection, Export, ExportSection, Function as WASMFunction, FunctionSection,
-    GlobalSection, ImportSection, MemorySection, MemoryType, Module as WASMModule, TableSection,
-    TypeSection,
+    GlobalSection, ImportSection, MemorySection, MemoryType, Module as WASMModule, NameMap,
+    NameSection, TableSection, TypeSection,
 };
+
+pub(super) struct EnsuredFunction {
+    pub type_index: u32,
+    pub function_index: u32,
+    pub function: WASMFunction,
+    pub name: String,
+}
 
 pub struct Module {
     pub(super) ensured: HashMap<Ensurable, u32>,
@@ -13,7 +20,8 @@ pub struct Module {
     pub(super) next_global_index: u32,
     // Instead of directly writing ensured functions to the function/code sections, delay writing
     // them until all user functions have been written so we can predict their IDs for calls
-    pub(super) ensured_functions: Vec<(u32, WASMFunction)>, // (type_index, function)
+    pub(super) ensured_functions: Vec<EnsuredFunction>,
+    pub function_names: NameMap,
 
     // https://webassembly.github.io/spec/core/binary/modules.html#sections
     pub types: TypeSection,         // 1
@@ -39,6 +47,7 @@ impl Module {
             types: TypeSection::new(),
             imports: ImportSection::new(),
             functions: FunctionSection::new(),
+            function_names: NameMap::new(),
             tables: TableSection::new(),
             memories: MemorySection::new(),
             globals: GlobalSection::new(),
@@ -61,6 +70,10 @@ impl Module {
     }
 
     pub fn finish(self) -> Vec<u8> {
+        // Build names section
+        let mut names = NameSection::new();
+        names.functions(&self.function_names);
+
         let mut module = WASMModule::new();
         // Attach sections to module
         module.section(&self.types);
@@ -72,6 +85,7 @@ impl Module {
         module.section(&self.exports);
         module.section(&self.elements);
         module.section(&self.codes);
+        module.section(&names);
         // Convert to bytes
         module.finish()
     }

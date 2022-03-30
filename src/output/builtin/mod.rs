@@ -20,3 +20,15 @@ pub enum BuiltinFunction {
     // [a: f64, b: f64, nan_greater: i32] -> [ord: i32]
     DoubleCmp,
 }
+
+impl BuiltinFunction {
+    pub fn name(&self) -> &'static str {
+        match self {
+            BuiltinFunction::Allocate => "!Allocate",
+            BuiltinFunction::InstanceOf => "!InstanceOf",
+            BuiltinFunction::LongCmp => "!LongCmp",
+            BuiltinFunction::FloatCmp => "!FloatCmp",
+            BuiltinFunction::DoubleCmp => "!DoubleCmp",
+        }
+    }
+}

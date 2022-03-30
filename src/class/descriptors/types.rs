@@ -1,6 +1,7 @@
+use itertools::Itertools;
 use std::cmp::Ordering;
 use std::fmt;
-use std::fmt::{Formatter, Write};
+use std::fmt::Write;
 use std::sync::Arc;
 use wasm_encoder::ValType;
 
@@ -38,7 +39,7 @@ impl fmt::Display for FieldDescriptor {
 }
 
 impl fmt::Debug for FieldDescriptor {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "FieldDescriptor {{ {} }}", self)
     }
 }
@@ -60,7 +61,7 @@ impl fmt::Display for ReturnDescriptor {
 }
 
 impl fmt::Debug for ReturnDescriptor {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ReturnDescriptor {{ {} }}", self)
     }
 }
@@ -76,6 +77,12 @@ impl FunctionType {
         let mut func_type = self.clone();
         func_type.params.insert(0, ValType::I32);
         func_type
+    }
+
+    pub fn dispatcher_name(&self) -> String {
+        let param_names = self.params.iter().copied().map(val_type_name).join("");
+        let result_names = self.results.iter().copied().map(val_type_name).join("");
+        format!("!Dispatcher_{}_{}", param_names, result_names)
     }
 }
 
@@ -132,7 +139,7 @@ impl fmt::Display for MethodDescriptor {
 }
 
 impl fmt::Debug for MethodDescriptor {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "MethodDescriptor {{ {} }}", self)
     }
 }
@@ -160,5 +167,17 @@ impl FieldDescriptor {
             ValType::I64 | ValType::F64 => 8,
             _ => unreachable!("{:?}", field_type),
         }
+    }
+}
+
+fn val_type_name(t: ValType) -> &'static str {
+    match t {
+        ValType::I32 => "i32",
+        ValType::I64 => "i64",
+        ValType::F32 => "f32",
+        ValType::F64 => "f64",
+        ValType::V128 => "v128",
+        ValType::FuncRef => "funcref",
+        ValType::ExternRef => "externref",
     }
 }

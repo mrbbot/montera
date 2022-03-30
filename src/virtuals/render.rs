@@ -44,10 +44,12 @@ impl VirtualTable {
             let mut f = WASMFunction::new(vec![]);
             f.instruction(&WASMInstruction::I32Const(super_id))
                 .instruction(&WASMInstruction::End);
-            out.functions.function(super_id_type_index);
-            out.codes.function(&f);
             let super_id_index = out.next_function_index;
             out.next_function_index += 1;
+            out.functions.function(super_id_type_index);
+            out.codes.function(&f);
+            out.function_names
+                .append(super_id_index, &format!("!Super_{}", class.class_name));
 
             // Add indices to table in output module
             let function_indices = once(super_id_index).chain(method_indices).collect_vec();

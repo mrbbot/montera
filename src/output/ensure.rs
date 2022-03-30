@@ -2,6 +2,7 @@ use crate::class::FunctionType;
 use crate::output::builtin::{
     construct_allocate, construct_compare, construct_instanceof, BuiltinFunction,
 };
+use crate::output::types::EnsuredFunction;
 use crate::output::Module;
 use crate::virtuals::VIRTUAL_CLASS_ID_MEM_ARG;
 use std::collections::hash_map::Entry;
@@ -43,11 +44,15 @@ fn ensure_type(
 impl Module {
     pub(super) fn render_ensured_functions_queue(&mut self) {
         let Module {
-            functions, codes, ..
+            functions,
+            codes,
+            function_names,
+            ..
         } = self;
-        for (type_index, f) in self.ensured_functions.drain(..) {
-            functions.function(type_index);
-            codes.function(&f);
+        for func in self.ensured_functions.drain(..) {
+            functions.function(func.type_index);
+            codes.function(&func.function);
+            function_names.append(func.function_index, &func.name);
         }
     }
 
@@ -80,6 +85,9 @@ impl Module {
                 let index = *next_function_index;
                 *next_function_index += 1;
                 entry.insert(index);
+
+                // Get name for debug info
+                let name = func_type.dispatcher_name();
 
                 // Construct type of dispatcher function
                 let mut func_type = func_type.with_implicit_this();
@@ -118,7 +126,12 @@ impl Module {
                 f.instruction(&WASMInstruction::End);
 
                 // Queue writing function to sections
-                ensured_functions.push((dispatcher_type_index, f));
+                ensured_functions.push(EnsuredFunction {
+                    type_index: dispatcher_type_index,
+                    function_index: index,
+                    function: f,
+                    name,
+                });
 
                 // Return function index
                 index
@@ -185,7 +198,12 @@ impl Module {
                 // Get type of constructed function
                 let type_index = ensure_type(ensured, next_type_index, types, &Arc::new(func_type));
                 // Queue writing function to sections
-                ensured_functions.push((type_index, f));
+                ensured_functions.push(EnsuredFunction {
+                    type_index,
+                    function_index: index,
+                    function: f,
+                    name: String::from(builtin.name()),
+                });
 
                 index
             }

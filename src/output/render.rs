@@ -55,6 +55,9 @@ impl Renderer {
             // MethodId are a collection of Arc's so clone() is cheap
             self.function_indices
                 .insert(func.id.clone(), out.next_function_index);
+            // Record method name for debug info
+            out.function_names
+                .append(out.next_function_index, &func.id.name());
             out.next_function_index += 1;
         }
     }
