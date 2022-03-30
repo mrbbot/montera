@@ -133,8 +133,8 @@ impl Renderer {
             Instruction::I(instruction) => f.instruction(&instruction),
             Instruction::Dup => {
                 let scratch_local = scratch_local.unwrap();
-                f.instruction(&WASMInstruction::LocalSet(scratch_local))
-                    .instruction(&WASMInstruction::LocalGet(scratch_local))
+                // LocalTee is equivalent to LocalSet followed by LocalGet
+                f.instruction(&WASMInstruction::LocalTee(scratch_local))
                     .instruction(&WASMInstruction::LocalGet(scratch_local))
             }
             Instruction::New(class_name) => {

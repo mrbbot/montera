@@ -68,20 +68,22 @@ pub fn construct_compare(t: ValType) -> (FunctionType, WASMFunction) {
     }
     f.instruction(&WASMInstruction::End);
 
-    // 3. Return -1 if a < b
-    f.instruction(&WASMInstruction::LocalGet(0))
-        .instruction(&WASMInstruction::LocalGet(1))
-        .instruction(&cmp.lt);
-    f.instruction(&WASMInstruction::If(BlockType::Empty));
-    {
-        f.instruction(&WASMInstruction::I32Const(-1))
-            .instruction(&WASMInstruction::Return);
-    }
-    f.instruction(&WASMInstruction::End);
-
-    // 4. Otherwise, one value is NaN. If treating NaNs as greater than, return 1, else -1.
-    //    If this type doesn't have NaN's, something's gone wrong, this should be unreachable.
+    // 3. Otherwise, if this type doesn't have NaN's, we know a < b, so return -1.
+    //   If the type does have NaN's, explicitly check a < b, then if that fails,
+    //   we know one value is NaN.
     if cmp.has_nan {
+        // 3a. Return -1 if a < b
+        f.instruction(&WASMInstruction::LocalGet(0))
+            .instruction(&WASMInstruction::LocalGet(1))
+            .instruction(&cmp.lt);
+        f.instruction(&WASMInstruction::If(BlockType::Empty));
+        {
+            f.instruction(&WASMInstruction::I32Const(-1))
+                .instruction(&WASMInstruction::Return);
+        }
+        f.instruction(&WASMInstruction::End);
+
+        // 3b. Otherwise, one value is NaN. If treating NaNs as greater than, return 1, else -1.
         f.instruction(&WASMInstruction::LocalGet(/* nan_greater */ 2));
         f.instruction(&WASMInstruction::If(BlockType::Result(ValType::I32)));
         {
@@ -93,9 +95,9 @@ pub fn construct_compare(t: ValType) -> (FunctionType, WASMFunction) {
         }
         f.instruction(&WASMInstruction::End);
     } else {
-        f.instruction(&WASMInstruction::Unreachable);
+        // 3a. We know a < b, so return -1.
+        f.instruction(&WASMInstruction::I32Const(-1));
     }
-
     f.instruction(&WASMInstruction::End);
 
     (func_type, f)
