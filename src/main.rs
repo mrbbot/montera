@@ -23,13 +23,13 @@ use crate::virtuals::VirtualTable;
 use anyhow::Context;
 use clap::Parser;
 use std::collections::HashMap;
-use std::fs;
 use std::path::PathBuf;
 use std::process::exit;
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
 use std::time::Instant;
+use std::{fs, panic};
 
 fn load_classes(
     schd: &impl Scheduler,
@@ -228,6 +228,13 @@ fn try_main() -> anyhow::Result<()> {
 }
 
 fn main() {
+    // Immediately terminate the program if any thread panics
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        default_hook(panic_info);
+        exit(1);
+    }));
+
     // Setup logger and parse command line options
     env_logger::builder().format_timestamp(None).init();
 
