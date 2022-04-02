@@ -29,16 +29,16 @@ impl WorkerScheduler {
         let handles = vec![];
 
         // Spawn n worker threads
-        let mut queue = Self {
+        let mut schd = Self {
             sender,
             receiver,
             handles,
         };
         debug!("Starting {} workers...", workers);
         for _ in 0..workers {
-            queue.spawn_worker()
+            schd.spawn_worker()
         }
-        queue
+        schd
     }
 
     fn spawn_worker(&mut self) {

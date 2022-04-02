@@ -53,13 +53,17 @@ fn parse_fields(
     let mut size = 0;
 
     for field in fields {
-        ensure!(
-            !field.access_flags.contains(FieldAccessFlags::STATIC),
-            "Static fields are not yet supported"
-        );
-
         let field_name = const_pool.str(field.name_index);
         let descriptor = const_pool.field_descriptor(field.descriptor_index);
+
+        // Ignore static fields which are required by assertions
+        if field.access_flags.contains(FieldAccessFlags::STATIC) {
+            warn!(
+                "Static fields are not yet supported, ignoring {}...",
+                field_name
+            );
+            continue;
+        }
 
         let offset = size;
         field_offsets.insert(field_name, offset);
@@ -78,9 +82,18 @@ fn parse_function(
     let name = const_pool.str(method.name_index);
     let descriptor = const_pool.method_descriptor(method.descriptor_index);
 
-    // Parse function instructions (if any)
-    let code = parse_code(const_pool, method)
-        .with_context(|| format!("Unable to parse code for {}", name))?;
+    // Parse function instructions (if any), ignoring class initializers, which are used by
+    // assertions
+    let code = if name.as_str() == "<clinit>" {
+        warn!(
+            "Class initializers fields are not yet supported, ignoring {}'s...",
+            class_name
+        );
+        Some(vec![(0, JVMInstruction::Nop)])
+    } else {
+        parse_code(const_pool, method)
+            .with_context(|| format!("Unable to parse code for {}", name))?
+    };
 
     // Build and return Function value
     let id = MethodId {

@@ -1,4 +1,4 @@
-use crate::class::{ConstantPool, NumericConstant, JAVA_LANG_OBJECT};
+use crate::class::{ConstantPool, FieldDescriptor, NumericConstant, JAVA_LANG_OBJECT};
 use crate::function::locals::LocalInterpretation;
 use crate::function::structure::{ConditionalKind, Loop, LoopKind, Structure, StructuredCode};
 use crate::function::Instruction::{self, I};
@@ -41,7 +41,11 @@ impl Visitor {
             JVMInstruction::Astore1 => locals.set(out, ValType::I32, 1),
             JVMInstruction::Astore2 => locals.set(out, ValType::I32, 2),
             JVMInstruction::Astore3 => locals.set(out, ValType::I32, 3),
-            JVMInstruction::Athrow => unimplemented!("Athrow (Exception)"),
+            JVMInstruction::Athrow => {
+                // Exceptions are not yet supported, but are required for assertions.
+                // In this case, emit an unreachable instruction to cause a trap.
+                out.push(I(WASMInstruction::Unreachable))
+            }
             JVMInstruction::Baload => unimplemented!("Baload (Array)"),
             JVMInstruction::Bastore => unimplemented!("Bastore (Array)"),
             JVMInstruction::Bipush(n) => out.push(I(WASMInstruction::I32Const(*n as i32))),
@@ -127,7 +131,18 @@ impl Visitor {
                 let id = const_pool.field(*n);
                 out.push(Instruction::GetField(id));
             }
-            JVMInstruction::Getstatic(_) => unimplemented!("Getstatic (Static Field)"),
+            JVMInstruction::Getstatic(n) => {
+                // Static fields are not yet supported, but are required for assertions
+                let id = const_pool.field(*n);
+                if id.name.as_str() == "$assertionsDisabled"
+                    && *id.descriptor == FieldDescriptor::Boolean
+                {
+                    // Always enable assertions
+                    out.push(I(WASMInstruction::I32Const(0)));
+                } else {
+                    unimplemented!("Getstatic (Static Field)")
+                }
+            }
             JVMInstruction::Goto(_) => out.push(I(WASMInstruction::Nop)),
             JVMInstruction::GotoW(_) => out.push(I(WASMInstruction::Nop)),
             JVMInstruction::I2b => out.push(I(WASMInstruction::Nop)),

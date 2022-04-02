@@ -138,12 +138,20 @@ impl Renderer {
                     .instruction(&WASMInstruction::LocalGet(scratch_local))
             }
             Instruction::New(class_name) => {
-                let size = self.get_class_size(&class_name);
-                let virtual_class_id = self.virtual_table.get_virtual_class_id(&class_name);
-                let allocate_index = out.ensure_builtin_function(BuiltinFunction::Allocate);
-                f.instruction(&WASMInstruction::I32Const(size))
-                    .instruction(&WASMInstruction::I32Const(virtual_class_id))
-                    .instruction(&WASMInstruction::Call(allocate_index))
+                if class_name.as_str() == "java/lang/AssertionError" {
+                    // The Java standard library is not supported, but basic support is required
+                    // for assertions. If we're creating an AssertionError, we've failed an
+                    // assertion so the instruction following this will be a throw (which we
+                    // currently translate to unreachable). Therefore, just emit null here.
+                    f.instruction(&WASMInstruction::I32Const(0))
+                } else {
+                    let size = self.get_class_size(&class_name);
+                    let virtual_class_id = self.virtual_table.get_virtual_class_id(&class_name);
+                    let allocate_index = out.ensure_builtin_function(BuiltinFunction::Allocate);
+                    f.instruction(&WASMInstruction::I32Const(size))
+                        .instruction(&WASMInstruction::I32Const(virtual_class_id))
+                        .instruction(&WASMInstruction::Call(allocate_index))
+                }
             }
             Instruction::InstanceOf(class_name) => {
                 let virtual_class_id = self.virtual_table.get_virtual_class_id(&class_name);
@@ -172,9 +180,19 @@ impl Renderer {
                 })
             }
             Instruction::CallStatic(id) => {
-                // TODO: check if we need to look at subclasses
-                let index = self.function_indices[&id];
-                f.instruction(&WASMInstruction::Call(index))
+                if id.class_name.as_str() == "java/lang/AssertionError"
+                    && id.name.as_str() == "<init>"
+                {
+                    // The Java standard library is not supported, but basic support is required
+                    // for assertions. If we're constructing an AssertionError, we've failed an
+                    // assertion so the instruction following this will be a throw (which we
+                    // currently translate to unreachable). Therefore, just nop here.
+                    f.instruction(&WASMInstruction::Nop)
+                } else {
+                    // TODO: check if we need to look at subclasses
+                    let index = self.function_indices[&id];
+                    f.instruction(&WASMInstruction::Call(index))
+                }
             }
             Instruction::CallVirtual(id) => {
                 let virtual_offset = self.virtual_table.get_method_virtual_offset(&id);
