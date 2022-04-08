@@ -1,0 +1,19 @@
+{
+  "name": "benchmarks",
+  "version": "1.0.0",
+  "author": "MrBBot <me@mrbbot.dev>",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "bench:build": "node scripts/benchmark-build.js",
+    "bench:runtime": "node scripts/benchmark-runtime.js",
+    "bench:size": "node scripts/benchmark-size.js",
+    "plot:build": "python3 plots/build.py",
+    "plot:runtime": "python3 plots/runtime.py",
+    "plot:size": "python3 plots/size.py"
+  },
+  "devDependencies": {
+    "mrmime": "^1.0.0",
+    "puppeteer": "^13.5.2"
+  }
+}

@@ -1,0 +1,38 @@
+# Created by https://www.toptal.com/developers/gitignore/api/gwt
+# Edit at https://www.toptal.com/developers/gitignore?templates=gwt
+
+### GWT ###
+*.class
+
+# Package Files #
+*.jar
+*.war
+
+# gwt caches and compiled units #
+war/gwt_bree/
+gwt-unitCache/
+
+# boilerplate generated classes #
+.apt_generated/
+
+# more caches and things from deploy #
+war/WEB-INF/deploy/
+war/WEB-INF/classes/
+
+#compilation logs
+.gwt/
+
+#gwt junit compilation files
+www-test/
+
+#old GWT (1.5) created this dir
+.gwt-tmp/
+
+# End of https://www.toptal.com/developers/gitignore/api/gwt
+
+# Compiled GWT files
+war/gwt
+
+# Eclipse files
+.classpath
+.project

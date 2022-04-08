@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html>
+  <script type="module">
+    const res = fetch("./out-wasm/mod.opt.wasm");
+    const { instance } = await WebAssembly.instantiateStreaming(res);
+    window.fib = instance.exports["Fib.fib(I)I"];
+    window.gcd = instance.exports["Gcd.gcd(II)I"];
+    window.sum = instance.exports["Objects.tripleSum(III)I"];
+  </script>
+</html>

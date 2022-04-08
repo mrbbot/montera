@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html>
+  <script type="module">
+    const classes = ["Fib", "Gcd", "Objects", "Objects$Pair", "Objects$Triple"]
+    await Promise.all(classes.map((name) => fetch(`./out-class/${name}.class`)));
+    window.fib = false;
+    window.gcd = false;
+    window.sum = false;
+  </script>
+</html>

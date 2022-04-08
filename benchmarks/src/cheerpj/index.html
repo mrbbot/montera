@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+  <script src="https://cjrtnc.leaningtech.com/2.2/loader.js"></script>
+  <script type="module">
+    cheerpjInit();
+    cheerpjRunJar("/app/cheerpj/out/artifacts/cheerpj_jar/cheerpj.jar");
+    window.fib = await cjResolveCall("Fib", "fib");
+    window.gcd = await cjResolveCall("Gcd", "gcd");
+    window.sum = await cjResolveCall("Objects", "tripleSum");
+  </script>
+</html>

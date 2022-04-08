@@ -1,0 +1,42 @@
+# IDE Configuration Files
+.vscode
+.idea
+*.iml
+
+# SDKs
+# https://leaningtech.com/download-cheerpj/ -> /sdks/cheerpj-2.2
+# https://storage.googleapis.com/gwt-releases/gwt-2.9.0.zip -> /sdks/gwt-2.9.0
+/sdks
+
+# CheerpJ Artifacts
+/src/cheerpj/out
+
+# Compiled Handwritten WebAssembly Artifacts
+/src/handwritten/out-wasm
+
+# JVM Artifacts
+/src/jvm/out-class
+
+# JWebAssembly Artifacts
+/src/jwebassembly/.gradle
+/src/jwebassembly/build
+
+# Montera Artifacts
+/src/montera/out-class
+/src/montera/out-wasm
+
+# TeaVM Artifacts
+/src/teavm/target
+
+# Node Dependencies
+node_modules
+
+# Benchmark Results
+/data
+
+# Python Virtual Environment and Cache
+/venv
+__pycache__
+
+# Rendered Plots
+/plots/*.pdf

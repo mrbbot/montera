@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+  <script src="./build/distributions/jwebassembly-1.0-SNAPSHOT.wasm.js"></script>
+  <script type="module">
+    const res = fetch("./build/distributions/jwebassembly-1.0-SNAPSHOT.wasm");
+    const { instance } = await WebAssembly.instantiateStreaming(res, wasmImports);
+    window.fib = instance.exports.fib;
+    window.gcd = instance.exports.gcd;
+    window.sum = instance.exports.tripleSum;
+  </script>
+</html>

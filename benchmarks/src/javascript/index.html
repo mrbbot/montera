@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+  <script>
+    function fib(n) {
+      if (n <= 1) return 1;
+      return fib(n - 1) + fib(n - 2);
+    }
+
+    function gcd(a, b) {
+      while (b != 0) {
+        let tmp = b;
+        b = a % b;
+        a = tmp;
+      }
+      return a;
+    }
+
+    class Pair {
+      constructor(a, b) {
+        this.a = a;
+        this.b = b;
+      }
+
+      sum() {
+        return this.a + this.b;
+      }
+    }
+    class Triple extends Pair {
+      constructor(a, b, c) {
+        super(a, b);
+        this.c = c;
+      }
+
+      sum() {
+        return super.sum() + this.c;
+      }
+    }
+    function sum(a, b, c) {
+      const triple = new Triple(a, b, c);
+      return triple.sum();
+    }
+  </script>
+</html>
