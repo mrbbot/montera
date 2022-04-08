@@ -65,6 +65,12 @@ impl<T> Graph<T> {
 
         doms.into_iter().map(|(k, v)| (k, v.unwrap())).collect()
     }
+
+    #[inline]
+    pub fn immediate_post_dominators(&self) -> HashMap<NodeId, NodeId> {
+        // Mapped values don't matter here, so use unit, we're only interested in IDs/edges
+        self.map_reversed(|_, _| ()).immediate_dominators()
+    }
 }
 
 #[cfg(test)]

@@ -184,6 +184,34 @@ impl<T> Graph<T> {
             entry: self.entry,
         }
     }
+
+    pub fn map_reversed<U, F: Fn(NodeId, &T) -> U>(&self, f: F) -> Graph<U> {
+        // Find single exit node in graph, this will become the new entry
+        let mut exits = self.iter().filter(|node| node.out_degree() == 0);
+        let exit = exits.next().expect("reverse expects an exit node");
+        assert!(
+            exits.next().is_none(),
+            "reverse expects exactly one exit node"
+        );
+
+        let nodes = self
+            .nodes
+            .iter()
+            .map(|maybe_node| {
+                maybe_node.as_ref().map(|node| Node {
+                    id: node.id,
+                    value: f(node.id, &node.value),
+                    // Swap direction of edges
+                    predecessors: node.successors.clone(),
+                    successors: node.predecessors.clone(),
+                })
+            })
+            .collect();
+        Graph {
+            nodes,
+            entry: Some(exit.id),
+        }
+    }
 }
 
 #[cfg(test)]

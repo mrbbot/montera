@@ -186,38 +186,48 @@ impl ControlFlowGraph {
         // We iterate in post-order, handling nested structures first. We do the traversal once at
         // the start to make sure we ignore placeholder nodes added by this function.
         let post_order = self.depth_first(Order::PostOrder);
+
+        // We use immediate post-dominance to differentiate between post-tested loop latching nodes
+        // and 2-way conditionals. An alternative would be to check if the latching node had out-
+        // degree 2, but this wouldn't work for 2-way conditionals where one branch of the
+        // conditional header pointed back to the original loop header directly.
+        let ipdom = self.immediate_post_dominators();
+
         for &header in &post_order.traversal {
             // Find all latching nodes with back edges to the header
             let mut latching = self.find_latching_nodes_for(&post_order, header);
 
             if latching.len() >= 2 {
-                // Case 1: check if any latching node is a 2-way conditional. If it is, we've got
-                // a post-tested loop. To fix this, we insert a new placeholder node above the
-                // header node, reconnect the back edge to that, then connect it to the header node.
-                // If the header node was the entry point, this is updated to the placeholder.
-                // This creates a new interval, ensuring the derived sequence of intervals properly
-                // captures the loop nesting order, and maintains the property of a single loop per
-                // interval.
-
-                let mut conditional_latchings =
-                    latching.iter().filter(|&&x| self[x].out_degree() == 2);
-                if let Some(&conditional_latching) = conditional_latchings.next() {
+                // Case 1: latching node is a post-tested loop latching node
+                // (i.e. if the header isn't the immediate post-dominator of the latching node)
+                //
+                // To fix this, we insert a new placeholder node above the header node, reconnect
+                // the back edge to that, then connect it to the header node. If the header node was
+                // the entry point, this is updated to the placeholder. This creates a new interval,
+                // ensuring the derived sequence of intervals properly captures the loop nesting
+                // order, and maintains the property of a single loop per interval.
+                let mut loop_latchings = latching.iter().filter(|&x| ipdom[x] != header);
+                if let Some(&loop_latching) = loop_latchings.next() {
                     // We don't support multi-exit loops, so make sure there's at most 1 of these.
-                    assert_eq!(conditional_latchings.next(), None);
+                    assert_eq!(loop_latchings.next(), None);
 
                     let placeholder = self.add_node(Structure::default());
 
                     // Re-connect back edge to placeholder
-                    self.swap_edge(conditional_latching, header, placeholder);
+                    self.swap_edge(loop_latching, header, placeholder);
 
                     // If header is the entrypoint, update it to point to the placeholder
                     if self.entry == Some(header) {
                         self.entry = Some(placeholder);
                     } else {
-                        // Otherwise, re-connect header's predecessors to placeholder.
-                        // (clone() as swap_edge will mutate header's predecessors)
+                        // Otherwise, re-connect header's predecessors (that are not back edges themselves)
+                        // to placeholder. (clone() as swap_edge will mutate header's predecessors
+                        // and requires a mutable borrow on self)
                         for pred in self[header].predecessors.clone() {
-                            self.swap_edge(pred, header, placeholder);
+                            // Only re-connect if pred -> header is not a back edge
+                            if post_order.cmp(pred, header).is_ge() {
+                                self.swap_edge(pred, header, placeholder);
+                            }
                         }
                     }
 
@@ -225,23 +235,23 @@ impl ControlFlowGraph {
                     self.add_edge(placeholder, header);
 
                     // Ignore this node when checking for Case 2
-                    remove_element(&mut latching, conditional_latching);
+                    remove_element(&mut latching, loop_latching);
                 }
             }
 
             if latching.len() >= 2 {
-                // Case 2: if we still have more than 2 latching nodes for the header, we have 2-way
-                // conditionals with loop headers as follow nodes. To fix this, insert a placeholder
-                // node and connect all back edges to it instead, then connect it to the original
-                // header node. This ensures a 2-way conditional's follow node is never a loop
-                // header.
-
+                // If we still have more than 2 latching nodes for the header...
+                //
+                // Case 2: 2-way conditionals with loop headers as follow nodes
+                //
+                // To fix this, insert a placeholder node and connect all back edges to it instead,
+                // then connect it to the original header node. This ensures a 2-way conditional's
+                // follow node is never a loop header.
                 let placeholder = self.add_node(Structure::default());
 
                 // Re-connect all remaining latching node's back edges to placeholder
                 for x in latching {
-                    // We should've handled all 2-way conditional latchings in Case 1
-                    assert_eq!(self[x].out_degree(), 1);
+                    // swap_edge maintains the correct true/false branching
                     self.swap_edge(x, header, placeholder);
                 }
 
