@@ -501,7 +501,7 @@ impl Visitor {
             // If this function is called when visiting the header of a post-tested loop,
             // do not treat it as a loop, as that would look to infinite recursion
             if !ignore_first_loop {
-                if let Some(loop_info) = self.code.loops.get(&n) {
+                if let Some(loop_info) = self.code.loops.get(n) {
                     // If n is a loop header node...
                     self.visit_loop(out, *loop_info);
                     n = loop_info.follow;
@@ -510,7 +510,7 @@ impl Visitor {
             }
             ignore_first_loop = false;
 
-            if let Some(&follow) = self.code.conditionals.get(&n) {
+            if let Some(&follow) = self.code.conditionals.get(n) {
                 // If n is a 2-way conditional header node...
                 self.visit_conditional(out, n, follow);
                 n = follow;

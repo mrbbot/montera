@@ -3,10 +3,9 @@ mod compound;
 mod loops;
 mod two_way;
 
-use crate::graph::{run_graphviz, DotOptions, NodeId};
+use crate::graph::{run_graphviz, DotOptions, NodeId, NodeMap};
 use anyhow::Context;
 use classfile_parser::code_attribute::Instruction as JVMInstruction;
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub use self::basic::*;
@@ -16,8 +15,8 @@ pub use self::two_way::*;
 
 pub struct StructuredCode {
     pub g: ControlFlowGraph,
-    pub loops: HashMap<NodeId, Loop>,
-    pub conditionals: HashMap<NodeId, NodeId>,
+    pub loops: NodeMap<Loop>,
+    pub conditionals: NodeMap<NodeId>,
 }
 
 pub fn structure_code(

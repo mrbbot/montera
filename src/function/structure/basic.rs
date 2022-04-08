@@ -206,7 +206,7 @@ impl ControlFlowGraph {
                 // the entry point, this is updated to the placeholder. This creates a new interval,
                 // ensuring the derived sequence of intervals properly captures the loop nesting
                 // order, and maintains the property of a single loop per interval.
-                let mut loop_latchings = latching.iter().filter(|&x| ipdom[x] != header);
+                let mut loop_latchings = latching.iter().filter(|&&x| ipdom[x] != header);
                 if let Some(&loop_latching) = loop_latchings.next() {
                     // We don't support multi-exit loops, so make sure there's at most 1 of these.
                     assert_eq!(loop_latchings.next(), None);

@@ -1,5 +1,5 @@
-use crate::graph::{Graph, NodeId};
-use std::collections::{HashMap, HashSet};
+use crate::graph::{Graph, NodeId, NodeMap};
+use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -75,9 +75,9 @@ impl<T> Graph<T> {
         let mut I = vec![G[0].intervals()];
 
         // Maps ids of nodes in the previous graph to the head of the interval they belong to
-        let mut node_intervals = HashMap::<NodeId, NodeId>::new();
+        let mut node_intervals = NodeMap::new();
         // Maps heads of intervals in the previous graph to their node ids in the new graph
-        let mut interval_nodes = HashMap::<NodeId, NodeId>::new();
+        let mut interval_nodes = NodeMap::new();
         // Set of already inserted edges in the new graph between nodes corresponding to intervals
         // in the previous graph
         let mut edges = HashSet::<(NodeId, NodeId)>::new();
@@ -101,10 +101,10 @@ impl<T> Graph<T> {
             // For every outgoing edge in the previous graph, if it crosses an interval boundary,
             // and there's not already an edge between those intervals' new nodes, add one
             for source in G[i - 1].iter() {
-                let source_interval = node_intervals.get(&source.id).unwrap();
+                let source_interval = *node_intervals.get(source.id).unwrap();
                 let source_interval_node = *interval_nodes.get(source_interval).unwrap();
-                for target in &source.successors {
-                    let target_interval = node_intervals.get(target).unwrap();
+                for &target in &source.successors {
+                    let target_interval = *node_intervals.get(target).unwrap();
                     if source_interval != target_interval {
                         let target_interval_node = *interval_nodes.get(target_interval).unwrap();
                         let edge = (source_interval_node, target_interval_node);

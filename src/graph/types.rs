@@ -8,7 +8,7 @@ pub fn remove_element<T: PartialEq + Copy>(vec: &mut Vec<T>, value: T) {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
-pub struct NodeId(usize);
+pub struct NodeId(pub(super) usize);
 
 impl fmt::Display for NodeId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -164,6 +164,11 @@ impl<T> Graph<T> {
     #[inline]
     pub fn len(&self) -> usize {
         self.iter().count()
+    }
+
+    #[inline]
+    pub(super) fn nodes_len(&self) -> usize {
+        self.nodes.len()
     }
 
     pub fn map<U, F: Fn(NodeId, &T) -> U>(&self, f: F) -> Graph<U> {

@@ -1,9 +1,8 @@
-use crate::graph::{Graph, NodeId, NodeOrder, Order};
-use std::collections::HashMap;
+use crate::graph::{Graph, NodeId, NodeMap, NodeOrder, Order};
 
 fn intersect(
     post_order: &NodeOrder,
-    doms: &HashMap<NodeId, Option<NodeId>>,
+    doms: &NodeMap<Option<NodeId>>,
     b1: NodeId,
     b2: NodeId,
 ) -> NodeId {
@@ -11,17 +10,17 @@ fn intersect(
     let mut finger2 = b2;
     while finger1 != finger2 {
         while post_order.cmp(finger1, finger2).is_lt() {
-            finger1 = doms[&finger1].unwrap()
+            finger1 = doms[finger1].unwrap()
         }
         while post_order.cmp(finger2, finger1).is_lt() {
-            finger2 = doms[&finger2].unwrap()
+            finger2 = doms[finger2].unwrap()
         }
     }
     finger1
 }
 
 impl<T> Graph<T> {
-    pub fn immediate_dominators(&self) -> HashMap<NodeId, NodeId> {
+    pub fn immediate_dominators(&self) -> NodeMap<NodeId> {
         let start = self.entry.expect("dominators needs entrypoint");
 
         let post_order = self.depth_first(Order::PostOrder);
@@ -29,7 +28,7 @@ impl<T> Graph<T> {
         reverse_post_order_traversal.reverse();
 
         // https://www.cs.rice.edu/~keith/EMBED/dom.pdf#page=7
-        let mut doms = HashMap::<NodeId, Option<NodeId>>::new();
+        let mut doms = NodeMap::with_capacity_for(self);
         for id in self.iter_id() {
             doms.insert(id, None);
         }
@@ -49,14 +48,14 @@ impl<T> Graph<T> {
                 let mut new_idom = *self[b]
                     .predecessors
                     .iter()
-                    .find(|p| doms[p].is_some())
+                    .find(|&&p| doms[p].is_some())
                     .unwrap();
                 for &p in &self[b].predecessors {
-                    if p != new_idom && doms[&p].is_some() {
+                    if p != new_idom && doms[p].is_some() {
                         new_idom = intersect(&post_order, &doms, p, new_idom)
                     }
                 }
-                if doms[&b] != Some(new_idom) {
+                if doms[b] != Some(new_idom) {
                     doms.insert(b, Some(new_idom));
                     changed = true;
                 }
@@ -67,7 +66,7 @@ impl<T> Graph<T> {
     }
 
     #[inline]
-    pub fn immediate_post_dominators(&self) -> HashMap<NodeId, NodeId> {
+    pub fn immediate_post_dominators(&self) -> NodeMap<NodeId> {
         // Mapped values don't matter here, so use unit, we're only interested in IDs/edges
         self.map_reversed(|_, _| ()).immediate_dominators()
     }
@@ -91,6 +90,6 @@ mod tests {
             n7 => n2,
             n8 => n7,
         };
-        assert_eq!(idom, expected_idom);
+        assert_eq!(idom, expected_idom.into());
     }
 }

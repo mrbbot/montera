@@ -1,12 +1,11 @@
-use crate::graph::{Graph, NodeId};
+use crate::graph::{Graph, NodeId, NodeMap, NodeSet};
 use either::Either;
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
 
 pub struct NodeOrder {
     pub traversal: Vec<NodeId>,
-    mapping: RefCell<Option<HashMap<NodeId, usize>>>,
+    mapping: RefCell<Option<NodeMap<usize>>>,
 }
 
 impl NodeOrder {
@@ -17,10 +16,7 @@ impl NodeOrder {
     }
 
     #[inline]
-    fn ensure_mapping<'a>(
-        &self,
-        mapping: &'a mut Option<HashMap<NodeId, usize>>,
-    ) -> &'a HashMap<NodeId, usize> {
+    fn ensure_mapping<'a>(&self, mapping: &'a mut Option<NodeMap<usize>>) -> &'a NodeMap<usize> {
         mapping.get_or_insert_with(|| {
             self.traversal
                 .iter()
@@ -33,8 +29,8 @@ impl NodeOrder {
     pub fn cmp(&self, a: NodeId, b: NodeId) -> Ordering {
         let mut mapping = self.mapping.borrow_mut();
         let mapping = self.ensure_mapping(&mut mapping);
-        let a_order = mapping[&a];
-        let b_order = mapping[&b];
+        let a_order = mapping[a];
+        let b_order = mapping[b];
         a_order.cmp(&b_order)
     }
 
@@ -58,7 +54,7 @@ impl<T> Graph<T> {
         &self,
         order: Order,
         traversal: &mut Vec<NodeId>,
-        visited: &mut HashSet<NodeId>,
+        visited: &mut NodeSet,
         node: NodeId,
     ) {
         if matches!(order, Order::PreOrder | Order::ReversePreOrder) {
@@ -70,7 +66,7 @@ impl<T> Graph<T> {
             _ => Either::Right(iter),
         };
         for &succ in iter {
-            if !visited.contains(&succ) {
+            if !visited.contains(succ) {
                 visited.insert(succ);
                 self.depth_first_inner(order, traversal, visited, succ);
             }
@@ -84,7 +80,7 @@ impl<T> Graph<T> {
         // Preallocate traversal/visited as we know we'll visit each node once, assuming connected
         let len = self.len();
         let mut traversal = Vec::with_capacity(len);
-        let mut visited = HashSet::with_capacity(len);
+        let mut visited = NodeSet::with_capacity_for(self);
 
         let start = self.entry.expect("traversal needs entrypoint");
         visited.insert(start);

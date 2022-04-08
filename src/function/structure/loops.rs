@@ -1,6 +1,5 @@
 use crate::function::structure::ControlFlowGraph;
-use crate::graph::{Graph, NodeId, Order};
-use std::collections::{HashMap, HashSet};
+use crate::graph::{Graph, NodeId, NodeMap, NodeSet, Order};
 use std::fmt;
 
 #[derive(Debug, Copy, Clone)]
@@ -42,9 +41,9 @@ fn is_reducible(G: &[Graph<Vec<NodeId>>]) -> bool {
 
 impl ControlFlowGraph {
     #[allow(non_snake_case)]
-    pub fn find_loops(&self) -> anyhow::Result<HashMap<NodeId, Loop>> {
-        let mut in_loop = HashSet::new();
-        let mut loops = HashMap::new();
+    pub fn find_loops(&self) -> anyhow::Result<NodeMap<Loop>> {
+        let mut in_loop = NodeSet::with_capacity_for(self);
+        let mut loops = NodeMap::with_capacity_for(self);
 
         let reverse_post_order = self.depth_first(Order::ReversePostOrder);
 
@@ -77,7 +76,7 @@ impl ControlFlowGraph {
                         .successors
                         .iter()
                         .any(|&target| target == h_j_derived)
-                        && !in_loop.contains(&x))
+                        && !in_loop.contains(x))
                     {
                         continue;
                     }
@@ -94,10 +93,11 @@ impl ControlFlowGraph {
                         .iter()
                         .flat_map(|&derived| G_i[derived].value.iter())
                         .copied()
-                        .collect::<HashSet<_>>();
-                    let mut body = hashset! {h_j};
+                        .collect::<NodeSet>();
+                    let mut body = NodeSet::new();
+                    body.insert(h_j);
                     for n in reverse_post_order.range(x, h_j) {
-                        if I_j.contains(&n) {
+                        if I_j.contains(n) {
                             in_loop.insert(n);
                             body.insert(n);
                         }
@@ -121,15 +121,10 @@ impl ControlFlowGraph {
         Ok(loops)
     }
 
-    fn find_loop_kind(
-        &self,
-        h_j: NodeId,
-        x: NodeId,
-        body: &HashSet<NodeId>,
-    ) -> anyhow::Result<LoopKind> {
+    fn find_loop_kind(&self, h_j: NodeId, x: NodeId, body: &NodeSet) -> anyhow::Result<LoopKind> {
         if self[x].out_degree() == 2 {
             if self[h_j].out_degree() == 2 {
-                if self[h_j].successors.iter().all(|n| body.contains(n)) {
+                if self[h_j].successors.iter().all(|&n| body.contains(n)) {
                     Ok(LoopKind::PostTested)
                 } else {
                     Ok(LoopKind::PreTested)
@@ -147,23 +142,17 @@ impl ControlFlowGraph {
         }
     }
 
-    fn find_loop_follow(
-        &self,
-        h_j: NodeId,
-        x: NodeId,
-        body: &HashSet<NodeId>,
-        kind: LoopKind,
-    ) -> NodeId {
+    fn find_loop_follow(&self, h_j: NodeId, x: NodeId, body: &NodeSet, kind: LoopKind) -> NodeId {
         match kind {
             LoopKind::PreTested => {
-                if body.contains(&self[h_j].successors[0]) {
+                if body.contains(self[h_j].successors[0]) {
                     self[h_j].successors[1]
                 } else {
                     self[h_j].successors[0]
                 }
             }
             LoopKind::PostTested => {
-                if body.contains(&self[x].successors[0]) {
+                if body.contains(self[x].successors[0]) {
                     self[x].successors[1]
                 } else {
                     self[x].successors[0]
