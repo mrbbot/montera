@@ -4,6 +4,8 @@ mod graph;
 mod options;
 mod output;
 mod scheduler;
+#[cfg(test)]
+mod tests;
 mod virtuals;
 
 #[macro_use]

@@ -235,7 +235,7 @@ impl ControlFlowGraph {
                     self.add_edge(placeholder, header);
 
                     // Ignore this node when checking for Case 2
-                    remove_element(&mut latching, loop_latching);
+                    remove_element(&mut latching, &loop_latching);
                 }
             }
 
