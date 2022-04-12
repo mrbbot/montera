@@ -20,7 +20,7 @@ use crate::function::{CompileFunctionJob, CompiledFunction, Function};
 use crate::graph::run_graphviz;
 use crate::options::Options;
 use crate::output::{Module, Renderer};
-use crate::scheduler::{Scheduler, SerialScheduler, WorkerScheduler};
+use crate::scheduler::Scheduler;
 use crate::virtuals::VirtualTable;
 use anyhow::Context;
 use clap::Parser;
@@ -182,9 +182,18 @@ fn try_main() -> anyhow::Result<()> {
     let start = Instant::now();
     let opts = Options::parse();
 
-    // Initialise job scheduler with worker threads
-    let schd = WorkerScheduler::new(num_cpus::get_physical());
-    // let schd = SerialScheduler {};
+    // Initialise appropriate job scheduler
+    #[cfg(feature = "parallel_scheduler")]
+    let schd = {
+        let workers = num_cpus::get_physical();
+        info!("Using {} worker(s)...", workers);
+        crate::scheduler::WorkerScheduler::new(workers)
+    };
+    #[cfg(not(feature = "parallel_scheduler"))]
+    let schd = {
+        info!("Using 1 worker...");
+        crate::scheduler::SerialScheduler {}
+    };
 
     // Queue jobs for loading input classes
     let class_count = opts.input_paths.len();

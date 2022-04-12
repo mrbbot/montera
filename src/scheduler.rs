@@ -12,12 +12,14 @@ pub trait Scheduler {
     fn schedule(&self, job: Box<dyn Job>); // Dynamic dispatch
 }
 
+#[cfg(feature = "parallel_scheduler")]
 pub struct WorkerScheduler {
     sender: Sender<Box<dyn Job>>,
     receiver: Arc<Mutex<Receiver<Box<dyn Job>>>>,
     handles: Vec<JoinHandle<()>>,
 }
 
+#[cfg(feature = "parallel_scheduler")]
 impl WorkerScheduler {
     pub fn new(workers: usize) -> Self {
         // Create a multi-producer single-consumer channel with an *infinite* buffer,
@@ -71,8 +73,10 @@ impl Scheduler for WorkerScheduler {
     }
 }
 
+#[cfg(not(feature = "parallel_scheduler"))]
 pub struct SerialScheduler;
 
+#[cfg(not(feature = "parallel_scheduler"))]
 impl Scheduler for SerialScheduler {
     fn schedule(&self, job: Box<dyn Job>) {
         job.process();

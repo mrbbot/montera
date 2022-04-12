@@ -5,6 +5,10 @@ version = "0.1.0"
 edition = "2018"
 license = "MIT"
 
+[features]
+default = ["parallel_scheduler"]
+parallel_scheduler = []
+
 [dependencies]
 anyhow = "1.0"
 binaryen = "0.12.0"

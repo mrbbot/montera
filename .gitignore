@@ -12,3 +12,6 @@
 /graphs
 # Test WebAssembly runner
 /runner.mjs
+
+# Test cache
+/.cache
