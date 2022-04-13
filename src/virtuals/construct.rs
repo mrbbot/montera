@@ -45,7 +45,7 @@ pub fn populate_tree_methods(
     // won't have an entry in classes, hence the `let Some(...)`.
     if let Some(class) = classes.get(class_name) {
         for method in &class.methods {
-            if method.id.name.as_str() == "<init>" {
+            if *method.id.name == "<init>" {
                 // Ignore constructors, classes always (potentially implicitly) define their own
                 // and they have special handling via the invokespecial JVM instruction
                 continue;

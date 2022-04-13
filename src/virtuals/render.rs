@@ -19,10 +19,7 @@ impl VirtualTable {
 
         let mut iter = self.inheritance_tree.iter();
         // First node in tree should always be java/lang/Object
-        assert_eq!(
-            iter.next().unwrap().value.class_name.as_str(),
-            JAVA_LANG_OBJECT
-        );
+        assert_eq!(*iter.next().unwrap().value.class_name, JAVA_LANG_OBJECT);
 
         // Add table elements, java/lang/Object has no methods, but leave a null where it's
         // super_id() function would go

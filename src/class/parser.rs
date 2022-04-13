@@ -101,7 +101,7 @@ fn parse_function(
 
     // Parse function instructions (if any), ignoring class initializers, which are used by
     // assertions
-    let code = if name.as_str() == "<clinit>" {
+    let code = if *name == "<clinit>" {
         warn!(
             "Class initializers fields are not yet supported, ignoring {}'s...",
             class_name
@@ -148,7 +148,7 @@ fn parse_code(
     let code_attr_info = method
         .attributes
         .iter()
-        .find(|attr| const_pool.str(attr.attribute_name_index).as_str() == "Code")
+        .find(|attr| *const_pool.str(attr.attribute_name_index) == "Code")
         .ok_or_else(|| anyhow!("Unable to find code"))?;
     let (_, code_attr) = code_attribute_parser(&code_attr_info.info)
         .map_err(|_| anyhow!("Unable to parse code attribute"))?;

@@ -138,7 +138,7 @@ impl Renderer {
                     .instruction(&WASMInstruction::LocalGet(scratch_local))
             }
             Instruction::New(class_name) => {
-                if class_name.as_str() == "java/lang/AssertionError" {
+                if *class_name == "java/lang/AssertionError" {
                     // The Java standard library is not supported, but basic support is required
                     // for assertions. If we're creating an AssertionError, we've failed an
                     // assertion so the instruction following this will be a throw (which we
@@ -180,9 +180,7 @@ impl Renderer {
                 })
             }
             Instruction::CallStatic(id) => {
-                if id.class_name.as_str() == "java/lang/AssertionError"
-                    && id.name.as_str() == "<init>"
-                {
+                if *id.class_name == "java/lang/AssertionError" && id.name.as_str() == "<init>" {
                     // The Java standard library is not supported, but basic support is required
                     // for assertions. If we're constructing an AssertionError, we've failed an
                     // assertion so the instruction following this will be a throw (which we

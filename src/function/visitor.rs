@@ -134,9 +134,7 @@ impl Visitor {
             JVMInstruction::Getstatic(n) => {
                 // Static fields are not yet supported, but are required for assertions
                 let id = const_pool.field(*n);
-                if id.name.as_str() == "$assertionsDisabled"
-                    && *id.descriptor == FieldDescriptor::Boolean
-                {
+                if *id.name == "$assertionsDisabled" && *id.descriptor == FieldDescriptor::Boolean {
                     // Always enable assertions
                     out.push(I(WASMInstruction::I32Const(0)));
                 } else {
@@ -227,7 +225,7 @@ impl Visitor {
             JVMInstruction::Invokeinterface { .. } => unimplemented!("Invokeinterface (Interface)"),
             JVMInstruction::Invokespecial(n) => {
                 let id = const_pool.method(*n);
-                if id.class_name.as_str() == JAVA_LANG_OBJECT && id.name.as_str() == "<init>" {
+                if *id.class_name == JAVA_LANG_OBJECT && *id.name == "<init>" {
                     // Implicit Object super(), no-op, but need to consume this reference
                     out.push(I(WASMInstruction::Drop))
                 } else {
