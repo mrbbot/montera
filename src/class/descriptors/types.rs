@@ -126,7 +126,8 @@ impl FunctionType {
         func_type
     }
 
-    /// Returns the name of the built-in dispatcher function for these parameter and return types.
+    /// Returns the name of the built-in WebAssembly dispatcher function for these parameter and
+    /// return types.
     pub fn dispatcher_name(&self) -> String {
         let param_names = self.params.iter().copied().map(val_type_name).format("");
         let result_names = self.results.iter().copied().map(val_type_name).format("");

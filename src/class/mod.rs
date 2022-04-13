@@ -26,7 +26,7 @@ impl Job for LoadClassJob {
     }
 }
 
-fn load_class<P: AsRef<Path>>(path: P) -> anyhow::Result<Class> {
+pub fn load_class<P: AsRef<Path>>(path: P) -> anyhow::Result<Class> {
     // Load class from disk
     let path = path.as_ref();
     let display = path.display();
