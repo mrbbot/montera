@@ -178,9 +178,19 @@ fn optimise_module(wasm: &[u8]) -> anyhow::Result<Vec<u8>> {
     Ok(binaryen_module.write())
 }
 
-fn try_main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     let start = Instant::now();
     let opts = Options::parse();
+
+    // Immediately terminate the program if any thread panics
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        default_hook(panic_info);
+        exit(1);
+    }));
+
+    // Setup logger and parse command line options
+    env_logger::builder().format_timestamp(None).init();
 
     // Initialise appropriate job scheduler
     #[cfg(feature = "parallel_scheduler")]
@@ -236,21 +246,4 @@ fn try_main() -> anyhow::Result<()> {
 
     info!("Finished in {}ms!", start.elapsed().as_millis());
     Ok(())
-}
-
-fn main() {
-    // Immediately terminate the program if any thread panics
-    let default_hook = panic::take_hook();
-    panic::set_hook(Box::new(move |panic_info| {
-        default_hook(panic_info);
-        exit(1);
-    }));
-
-    // Setup logger and parse command line options
-    env_logger::builder().format_timestamp(None).init();
-
-    try_main().unwrap_or_else(|e| {
-        error!("{:?}", e);
-        exit(1);
-    })
 }

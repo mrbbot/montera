@@ -1,4 +1,5 @@
 use crate::graph::Graph;
+use itertools::Itertools;
 use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::io;
@@ -73,7 +74,7 @@ impl<T: Debug> Graph<T> {
             std::iter::once(node_string).chain(edge_strings)
         });
         // Join lines with newlines characters
-        let lines = itertools::join(lines, "\n");
+        let lines = lines.format("\n");
 
         // Wrap lines with appropriate DOT graph type
         match opts.subgraph {
