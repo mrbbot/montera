@@ -190,3 +190,332 @@ impl ControlFlowGraph {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::function::structure::{ConditionalKind, ControlFlowGraph, Structure};
+    use crate::graph::{DotOptions, NodeId};
+    use crate::run_graphviz;
+    use crate::tests::load_basic_blocks;
+    use classfile_parser::code_attribute::Instruction as JVMInstruction;
+
+    fn compound_conditional_fixture() -> (ControlFlowGraph, (NodeId, NodeId, NodeId, NodeId)) {
+        let mut g = ControlFlowGraph::new();
+        let x = g.add_node(Structure::Block(vec![
+            JVMInstruction::Iload0,
+            JVMInstruction::Iconst1,
+            JVMInstruction::IfIcmple(0),
+        ]));
+        let y = g.add_node(Structure::Block(vec![
+            JVMInstruction::Iload1,
+            JVMInstruction::Iconst1,
+            JVMInstruction::IfIcmple(0),
+        ]));
+        let f = g.add_node(Structure::Block(vec![
+            JVMInstruction::Iconst0,
+            JVMInstruction::Ireturn,
+        ]));
+        let t = g.add_node(Structure::Block(vec![
+            JVMInstruction::Iconst1,
+            JVMInstruction::Ireturn,
+        ]));
+        (g, (x, y, f, t))
+    }
+
+    #[test]
+    fn compound_conditional_conjunction() {
+        // Construct `a && b` graph
+        let (mut g, (x, y, f, t)) = compound_conditional_fixture();
+        g.add_edge(x, f);
+        g.add_edge(x, y);
+        g.add_edge(y, f);
+        g.add_edge(y, t);
+        g.structure_compound_conditionals();
+
+        // Check graph rewritten correctly
+        assert_eq!(g.len(), 3);
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].successors, [f, t]);
+        assert!(matches!(
+            g[entry].value,
+            Structure::CompoundConditional {
+                left_negated: false,
+                kind: ConditionalKind::Conjunction,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn compound_conditional_negated_conjunction() {
+        // Construct `!a && b` graph
+        let (mut g, (x, y, f, t)) = compound_conditional_fixture();
+        g.add_edge(x, y);
+        g.add_edge(x, f);
+        g.add_edge(y, f);
+        g.add_edge(y, t);
+        g.structure_compound_conditionals();
+
+        // Check graph rewritten correctly
+        assert_eq!(g.len(), 3);
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].successors, [f, t]);
+        assert!(matches!(
+            g[entry].value,
+            Structure::CompoundConditional {
+                left_negated: true,
+                kind: ConditionalKind::Conjunction,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn compound_conditional_disjunction() {
+        // Construct `a || b` graph
+        let (mut g, (x, y, f, t)) = compound_conditional_fixture();
+        g.add_edge(x, y);
+        g.add_edge(x, t);
+        g.add_edge(y, f);
+        g.add_edge(y, t);
+        g.structure_compound_conditionals();
+
+        // Check graph rewritten correctly
+        assert_eq!(g.len(), 3);
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].successors, [f, t]);
+        assert!(matches!(
+            g[entry].value,
+            Structure::CompoundConditional {
+                left_negated: false,
+                kind: ConditionalKind::Disjunction,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn compound_conditional_negated_disjunction() {
+        // Construct `!a || b` graph
+        let (mut g, (x, y, f, t)) = compound_conditional_fixture();
+        g.add_edge(x, t);
+        g.add_edge(x, y);
+        g.add_edge(y, f);
+        g.add_edge(y, t);
+        g.structure_compound_conditionals();
+
+        // Check graph rewritten correctly
+        assert_eq!(g.len(), 3);
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].successors, [f, t]);
+        assert!(matches!(
+            g[entry].value,
+            Structure::CompoundConditional {
+                left_negated: true,
+                kind: ConditionalKind::Disjunction,
+                ..
+            }
+        ));
+    }
+
+    fn compound_conditional_single_code(
+        expression: &str,
+        expected_left_negated: bool,
+        expected_kind: ConditionalKind,
+        expected_left_conditional_instruction: JVMInstruction,
+        expected_right_conditional_instruction: JVMInstruction,
+    ) -> anyhow::Result<()> {
+        // Load graph containing basic blocks for expression
+        let mut g = load_basic_blocks(&format!(
+            "boolean a = false, b = false;
+            if ({}) {{ n = 1; }} else {{ n = 0; }}
+            return n;",
+            expression
+        ))?;
+        g.insert_placeholder_nodes();
+        g.structure_compound_conditionals();
+
+        // Check graph rewritten correctly
+        assert_eq!(g.len(), 4);
+        let entry = g.entry.unwrap();
+        assert_eq!(
+            g[entry].value,
+            Structure::CompoundConditional {
+                left_negated: expected_left_negated,
+                kind: expected_kind,
+                left: Box::new(Structure::Block(vec![
+                    JVMInstruction::Iconst0,
+                    JVMInstruction::Istore1,
+                    JVMInstruction::Iconst0,
+                    JVMInstruction::Istore2,
+                    JVMInstruction::Iload1,
+                    expected_left_conditional_instruction,
+                ])),
+                right: Box::new(Structure::Block(vec![
+                    JVMInstruction::Iload2,
+                    expected_right_conditional_instruction,
+                ]))
+            }
+        );
+        assert_eq!(g[entry].successors.len(), 2);
+        assert_eq!(
+            g[g[entry].successors[0]].value,
+            Structure::Block(vec![
+                JVMInstruction::Iconst1,
+                JVMInstruction::Istore0,
+                JVMInstruction::Goto(5),
+            ])
+        );
+        assert_eq!(
+            g[g[entry].successors[1]].value,
+            Structure::Block(vec![JVMInstruction::Iconst0, JVMInstruction::Istore0])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn compound_conditional_conjunction_code() -> anyhow::Result<()> {
+        compound_conditional_single_code(
+            "a && b",
+            false,
+            ConditionalKind::Disjunction,
+            JVMInstruction::Ifeq(12),
+            JVMInstruction::Ifeq(8),
+        )
+    }
+
+    #[test]
+    fn compound_conditional_negated_conjunction_code() -> anyhow::Result<()> {
+        compound_conditional_single_code(
+            "!a && b",
+            false,
+            ConditionalKind::Disjunction,
+            JVMInstruction::Ifne(12),
+            JVMInstruction::Ifeq(8),
+        )
+    }
+
+    #[test]
+    fn compound_conditional_disjunction_code() -> anyhow::Result<()> {
+        compound_conditional_single_code(
+            "a || b",
+            true,
+            ConditionalKind::Conjunction,
+            JVMInstruction::Ifne(7),
+            JVMInstruction::Ifeq(8),
+        )
+    }
+
+    #[test]
+    fn compound_conditional_negated_disjunction_code() -> anyhow::Result<()> {
+        compound_conditional_single_code(
+            "!a || b",
+            true,
+            ConditionalKind::Conjunction,
+            JVMInstruction::Ifeq(7),
+            JVMInstruction::Ifeq(8),
+        )
+    }
+
+    #[test]
+    fn compound_conditional_multiple_code() -> anyhow::Result<()> {
+        // Load graph containing basic blocks for multiple sequential short-circuit expressions
+        let mut g = load_basic_blocks(
+            "boolean a = false, b = false;
+            if (a && b) { n = 1; } else { n = 0; }
+            if (a || b) { n = 1; } else { n = 0; }
+            return n;",
+        )?;
+        g.insert_placeholder_nodes();
+        g.structure_compound_conditionals();
+
+        // Check graph rewritten correctly
+        assert_eq!(g.len(), 3 + 3 + 1); // `a && b` + `a || b` + follow2
+        let entry = g.entry.unwrap();
+        assert!(matches!(
+            g[entry].value,
+            Structure::CompoundConditional {
+                left_negated: false,
+                kind: ConditionalKind::Disjunction,
+                ..
+            }
+        ));
+        let follow1 = g[g[entry].successors[0]].successors[0];
+        assert!(matches!(
+            g[follow1].value,
+            Structure::CompoundConditional {
+                left_negated: true,
+                kind: ConditionalKind::Conjunction,
+                ..
+            }
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn compound_conditional_nested_code() -> anyhow::Result<()> {
+        // Load graph containing basic blocks for nested short-circuit expression
+        let mut g = load_basic_blocks(
+            "boolean a = false, b = false, c = false, d = false;
+            if (((a || b) && c) || (a && d)) { n = 1; } else { n = 0; }
+            return n;",
+        )?;
+        g.insert_placeholder_nodes();
+        g.structure_compound_conditionals();
+
+        // Check graph rewritten correctly
+        assert_eq!(g.len(), 4);
+        let entry = g.entry.unwrap();
+        assert_eq!(
+            g[entry].value,
+            Structure::CompoundConditional {
+                left_negated: true,
+                kind: ConditionalKind::Conjunction,
+                left: Box::new(Structure::CompoundConditional {
+                    left_negated: true,
+                    kind: ConditionalKind::Conjunction,
+                    left: Box::new(Structure::CompoundConditional {
+                        left_negated: true,
+                        kind: ConditionalKind::Conjunction,
+                        left: Box::new(Structure::Block(vec![
+                            JVMInstruction::Iconst0,
+                            JVMInstruction::Istore1,
+                            JVMInstruction::Iconst0,
+                            JVMInstruction::Istore2,
+                            JVMInstruction::Iconst0,
+                            JVMInstruction::Istore3,
+                            JVMInstruction::Iconst0,
+                            JVMInstruction::Istore(4),
+                            JVMInstruction::Iload1,
+                            JVMInstruction::Ifne(7),
+                        ])),
+                        right: Box::new(Structure::Block(vec![
+                            JVMInstruction::Iload2,
+                            JVMInstruction::Ifeq(7),
+                        ]))
+                    }),
+                    right: Box::new(Structure::Block(vec![
+                        JVMInstruction::Iload3,
+                        JVMInstruction::Ifne(12),
+                    ]))
+                }),
+                right: Box::new(Structure::CompoundConditional {
+                    left_negated: false,
+                    kind: ConditionalKind::Disjunction,
+                    left: Box::new(Structure::Block(vec![
+                        JVMInstruction::Iload1,
+                        JVMInstruction::Ifeq(13),
+                    ])),
+                    right: Box::new(Structure::Block(vec![
+                        JVMInstruction::Iload(4),
+                        JVMInstruction::Ifeq(8),
+                    ]))
+                }),
+            }
+        );
+
+        Ok(())
+    }
+}
