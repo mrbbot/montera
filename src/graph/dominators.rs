@@ -1,6 +1,6 @@
 use crate::graph::{Graph, NodeId, NodeMap, NodeOrder, Order};
 
-/// Helper method for [`Graph::immediate_dominators`].
+/// Helper function for [`Graph::immediate_dominators`].
 fn intersect(
     post_order: &NodeOrder,
     doms: &NodeMap<Option<NodeId>>,

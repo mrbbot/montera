@@ -1,5 +1,5 @@
 mod locals;
-mod structure;
+pub mod structure;
 mod types;
 mod visitor;
 

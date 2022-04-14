@@ -1,6 +1,7 @@
 //! Common testing helper functions
 
 use crate::class::load_class;
+use crate::function::structure::ControlFlowGraph;
 use crate::Class;
 use data_encoding::HEXLOWER;
 use sha1::{Digest, Sha1};
@@ -89,4 +90,32 @@ pub fn load_many_code(code: &str) -> anyhow::Result<HashMap<String, Class>> {
 /// ```
 pub fn load_code(code: &str) -> anyhow::Result<Class> {
     load_many_code(code).map(|mut classes| classes.remove("Test").unwrap())
+}
+
+/// Compiles, loads and parses Java code, returning a control flow graph containing basic blocks.
+///
+/// Compilation will be cached. `code` should be the body of a function, returning an integer, and
+/// will be placed inside the following template:
+///
+/// ```java
+/// public class Test {
+///     static int test(int n) {
+///         // `code` goes here
+///     }
+/// }
+/// ```
+pub fn load_basic_blocks(code: &str) -> anyhow::Result<ControlFlowGraph> {
+    // Compile function
+    let class = load_code(&format!("static int test(int n) {{\n{}\n}}", code))?;
+    // Make sure class has expected format, implicit constructor followed by our test method
+    assert_eq!(class.methods.len(), 2);
+    assert_eq!(*class.methods[0].id.name, "<init>");
+    assert_eq!(*class.methods[1].id.name, "test");
+    // Extract code out of parsed class
+    let mut code_guard = class.methods[1].code.lock().unwrap();
+    let code = code_guard.take().unwrap();
+    // Build and return control flow graph containing basic blocks
+    let mut g = ControlFlowGraph::new();
+    g.insert_basic_blocks(code);
+    Ok(g)
 }

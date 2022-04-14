@@ -6,6 +6,7 @@ mod two_way;
 use crate::graph::{run_graphviz, DotOptions, NodeId, NodeMap};
 use anyhow::Context;
 use classfile_parser::code_attribute::Instruction as JVMInstruction;
+use itertools::Itertools;
 use std::path::PathBuf;
 
 pub use self::basic::*;
@@ -13,12 +14,37 @@ pub use self::compound::*;
 pub use self::loops::*;
 pub use self::two_way::*;
 
+/// Output of [`structure_code`], containing a structured control flow graph with extracted control
+/// flow constructs.
 pub struct StructuredCode {
+    /// Control flow graph including structured compound conditionals.
     pub g: ControlFlowGraph,
+    /// Identified pre/post-tested loops in `g`, including header, latching and follow nodes.
     pub loops: NodeMap<Loop>,
+    /// Maps identified 2-way conditional headers in `g` to their follow nodes.
     pub conditionals: NodeMap<NodeId>,
 }
 
+/// Structures JVM bytecode, identifying control flow constructs using the algorithms described in
+/// Chapter 6 of "Cristina Cifuentes. Reverse Compilation Techniques. PhD thesis, Queensland
+/// University of Technology, 1994".
+///
+/// See the following functions for more details on each stage of the process:
+///
+/// 1. [`ControlFlowGraph::insert_basic_blocks`]: finds basic blocks in bytecode
+/// 2. [`ControlFlowGraph::insert_placeholder_nodes`]: inserts placeholders for loop structuring
+/// 3. [`ControlFlowGraph::structure_compound_conditionals`]: rewrite irreducible short-circuit
+///    patterns to single nodes
+/// 4. [`ControlFlowGraph::find_loops`]: identify pre/post-tested loops
+/// 5. [`ControlFlowGraph::find_2_way_conditionals`]: identify 2-way conditionals (if-statements)
+///
+/// If `graphs_dir` is provided, the following graphs will be rendered using Graphviz. Note this
+/// significantly slows down compilation:
+///
+/// - `<graphs_dir>/basic.png`: after stage 1, basic blocks only
+/// - `<graphs_dir>/placeholder.png`: after stage 2, basic blocks with inserted placeholder nodes
+/// - `<graphs_dir>/compound.png`: after stage 3, basic blocks with rewritten short-circuit nodes
+/// - `<graphs_dir>/derived.png`: after stage 3, derived sequence of intervals of control flow graph
 pub fn structure_code(
     code: Vec<(usize, JVMInstruction)>,
     graphs_dir: Option<&PathBuf>,
@@ -87,6 +113,6 @@ fn derived_sequence_as_dot(g: &ControlFlowGraph) -> String {
             ..Default::default()
         })
     });
-    let dot = format!("digraph {{\n{}\n}}\n", itertools::join(dots, "\n"));
+    let dot = format!("digraph {{\n{}\n}}\n", dots.format("\n"));
     dot
 }

@@ -2,6 +2,25 @@ use crate::function::structure::ControlFlowGraph;
 use crate::graph::{NodeId, NodeMap, NodeSet, Order};
 
 impl ControlFlowGraph {
+    /// Identifies all 2-way conditionals (`if`-statements) in the control flow graph, returning a
+    /// map of header nodes to their corresponding follow nodes, using the algorithm described in
+    /// Figure 6.31 of "Cristina Cifuentes. Reverse Compilation Techniques. PhD thesis, Queensland
+    /// University of Technology, 1994".
+    ///
+    /// Note multiple headers may share the same follow node if they are nested.
+    ///
+    /// This should be called after structuring compound short-circuit conditionals, as these might
+    /// be used in header nodes (e.g. `if (a && b) { ... }`).
+    ///
+    /// # Overview
+    ///
+    /// The analysis uses [immediate dominators](crate::graph::Graph::immediate_dominators).
+    /// The graph is traversed in depth-first post-order (reverse) so nested structures are handled
+    /// first. An `unresolved` set records header nodes for which follow nodes haven't yet been
+    /// found. The follow node is the maximum node with the header as its immediate dominator, and
+    /// at least 2 predecessors (for 2 paths from the header). If this follow cannot be found, the
+    /// header is added to `unresolved`. When a follow node is found, all `unresolved` header nodes
+    /// are assigned that follow node.
     pub fn find_2_way_conditionals(&self, ignored_headers: &NodeSet) -> NodeMap<NodeId> {
         // Find immediate dominators
         let idom = self.immediate_dominators();

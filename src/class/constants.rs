@@ -247,7 +247,7 @@ mod tests {
     use classfile_parser::constant_info::{ConstantInfo, Utf8Constant};
     use std::sync::Arc;
 
-    /// Helper method finding constant index of first LDC instruction in implicit constructor.
+    /// Helper function for finding constant index of first LDC instruction in implicit constructor.
     fn ldc_index(method: &Function) -> u16 {
         assert_eq!(*method.id.name, "<init>");
         let code_guard = method.code.lock().unwrap();

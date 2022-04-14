@@ -4,6 +4,7 @@ use classfile_parser::code_attribute::Instruction as JVMInstruction;
 use std::fmt;
 use std::mem::take;
 
+/// Possible short-circuit conditional types for [`Structure::CompoundConditional`]s.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ConditionalKind {
     Disjunction, // || OR
@@ -19,6 +20,8 @@ impl fmt::Display for ConditionalKind {
     }
 }
 
+/// Helper function for [`ControlFlowGraph::structure_compound_conditionals`], returning `true` if
+/// and only if the `node` is a conditional branching node (i.e. it branches based on a value).
 fn is_conditional_branch(node: &Node<Structure>) -> bool {
     match &node.value {
         Structure::Block(instructions) => {
@@ -50,9 +53,18 @@ fn is_conditional_branch(node: &Node<Structure>) -> bool {
 }
 
 impl ControlFlowGraph {
+    /// Helper function for [`ControlFlowGraph::structure_compound_conditionals`], replacing the
+    /// node at `left_index` with a [`Structure::CompoundConditional`] using nodes at `left_index`
+    /// and `right_index` as its `left` and `right` expressions, with `false_index` and `true_index`
+    /// as the false and true branches respectively. The node at `right_index` will be removed.
+    ///
+    /// The node at `left_index` is effectively rewritten to:
+    ///
+    /// ```
+    /// if (!)left_index &&/|| right_index { true_index } else { false_index }
+    /// ```
     fn rewrite_compound_conditional(
         &mut self,
-        // if (!)left_index &&/|| right_index { true_index } else { false_index }
         kind: ConditionalKind,
         left_negated: bool,
         left_index: NodeId,
@@ -60,7 +72,8 @@ impl ControlFlowGraph {
         false_index: NodeId,
         true_index: NodeId,
     ) {
-        // Extract left and right values to avoid cloning
+        // Extract left and right values to avoid cloning (we'll be replacing left_index and
+        // removing right_index, so this is safe)
         let left_value = take(&mut self[left_index].value);
         let right_value = take(&mut self[right_index].value);
 
@@ -80,10 +93,22 @@ impl ControlFlowGraph {
 
         // Connect new node's false/true branches to false_node/true_node respectively
         // (note the ordering of these calls is important)
-        self.add_edge(left_index, false_index);
-        self.add_edge(left_index, true_index);
+        self.add_edge(left_index, /* 0 */ false_index);
+        self.add_edge(left_index, /* 1 */ true_index);
     }
 
+    /// Repeatedly rewrites all short-circuit conditional patterns in this control flow graph to
+    /// single [`Structure::CompoundConditional`] nodes using the algorithm described in Figure 6.34
+    /// of "Cristina Cifuentes. Reverse Compilation Techniques. PhD thesis, Queensland University of
+    /// Technology, 1994".
+    ///
+    /// This is required because short-circuit constructs produce irreducible flow graphs, which
+    /// would require code duplication to be represented in a structured language like WebAssembly.
+    ///
+    /// This should be performed before finding loops and two-way conditionals as these may use
+    /// compound conditionals in their headers/latchings.
+    ///
+    /// ![Short Circuit Conditional Rewrite Rules](../../../images/shortcircuit.png)
     pub fn structure_compound_conditionals(&mut self) {
         let mut change = true;
         while change {
@@ -148,6 +173,7 @@ impl ControlFlowGraph {
                             );
                         } else if e_node.successors[1] == t {
                             change = true;
+                            // !n || e
                             let other_e_edge = e_node.successors[0];
                             self.rewrite_compound_conditional(
                                 ConditionalKind::Disjunction,

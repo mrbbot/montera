@@ -186,6 +186,7 @@ impl<T> Graph<T> {
             edges.clear();
         }
 
+        assert_eq!(G.len(), I.len());
         (G, I)
     }
 }

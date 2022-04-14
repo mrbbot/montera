@@ -4,8 +4,13 @@ use classfile_parser::code_attribute::Instruction as JVMInstruction;
 use std::collections::HashMap;
 use std::fmt;
 
+/// Node value for control flow graphs, either a basic block or compound conditional.
+#[derive(Eq, PartialEq)]
 pub enum Structure {
+    /// Basic block consisting of a sequence of instructions executed in order.
     Block(Vec<JVMInstruction>),
+    /// Short-circuit conditional, `left` is always evaluated, but `right` may not be evaluated
+    /// if the result of the conditional can be determined from `left` only.
     CompoundConditional {
         kind: ConditionalKind,
         left_negated: bool,
@@ -15,8 +20,8 @@ pub enum Structure {
 }
 
 impl Default for Structure {
+    /// Returns an empty basic block, doesn't allocate until items are added to the block.
     fn default() -> Self {
-        // Doesn't allocate until items are added to the block
         Structure::Block(vec![])
     }
 }
@@ -51,8 +56,18 @@ impl fmt::Debug for Structure {
     }
 }
 
+/// Type specialisation of single-entry directed [`Graph`]s for control flow graphs, using
+/// [`Structure`]s for node values.
 pub type ControlFlowGraph = Graph<Structure>;
 
+/// Macro for matching on conditional, unconditional and not branching JVM instructions, at a
+/// specific label.
+///
+/// All `IF*` instructions are conditional branches. `GOTO` and `GOTO_W `are unconditional branches.
+/// All remaining instructions are not branching.
+///
+/// For conditional and unconditional branches, the absolute target label of the branch is bound to
+/// the match arm.
 macro_rules! match_branches {
     ($label:expr, $instruction:expr, {
         None => $no_branch:block,
@@ -89,6 +104,10 @@ macro_rules! match_branches {
 }
 
 impl ControlFlowGraph {
+    /// Helper function for [`ControlFlowGraph::insert_basic_blocks`] that ensures this graph
+    /// contains a node for the leader at `label` and this node's ID is stored in the `leaders` map.
+    ///
+    /// Returns the ID of the inserted or existing node.
     #[inline]
     fn ensure_leader(&mut self, leaders: &mut HashMap<usize, NodeId>, label: usize) -> NodeId {
         *leaders
@@ -96,6 +115,26 @@ impl ControlFlowGraph {
             .or_insert_with(|| self.add_node(Structure::default()))
     }
 
+    /// Adds all basic blocks in the JVM byte`code` to this graph.
+    ///
+    /// This should only be called once per `ControlFlowGraph` instance.
+    ///
+    /// # Definitions
+    ///
+    /// A basic block is a maximal instruction sequence with no internal control flow. All
+    /// instruction nodes inside a basic block have a single predecessor and successor, except the
+    /// first node which may have many predecessors, and the last node which may have many
+    /// successors.
+    ///
+    /// To find basic blocks, we look for *leader* nodes which are the first nodes in each basic
+    /// blocks. Leaders delimit basic blocks, which are made up of the leader and all instructions
+    /// up to the next leader.
+    ///
+    /// A node is a leader if it is:
+    ///
+    /// - The first instruction (entrypoint)
+    /// - The target of a branch
+    /// - The instruction immediately following a branch
     pub fn insert_basic_blocks(&mut self, code: Vec<(usize, JVMInstruction)>) {
         // Maps JVM labels at the start of basic block (leaders) to node IDs
         let mut leaders = HashMap::new();
@@ -160,6 +199,9 @@ impl ControlFlowGraph {
         }
     }
 
+    /// Helper function for [`ControlFlowGraph::insert_placeholder_nodes`] that returns all nodes
+    /// in the graph with a back edge to the `header` node.
+    #[inline]
     fn find_latching_nodes_for(&self, post_order: &NodeOrder, header: NodeId) -> Vec<NodeId> {
         self[header]
             .predecessors
@@ -169,20 +211,21 @@ impl ControlFlowGraph {
             .collect()
     }
 
+    /// Ensures there are no nodes with 2 or more back edges to them in this graph as the loop
+    /// structuring algorithm requires a unique back edge for each loop.
+    ///  
+    /// There are 2 cases where this will happen:
+    ///  
+    /// 1. A pre and post-tested loop share a header node, with the post-tested 2-way latching node
+    ///    having a back edge to the header and an edge to the follow.
+    ///
+    ///    (e.g. pre-tested at start of post-tested body, `do { while(...) {...} } while(...)` )
+    ///
+    /// 2. A 2-way conditional has a follow node as a loop header, meaning the 2 branches converge
+    ///    via back edges.
+    ///
+    ///    (e.g. if-else at end of pre-tested body, `while(...) { if(...) {...} else {...} }`)
     pub fn insert_placeholder_nodes(&mut self) {
-        // Whenever there is a node with 2 or more back edges to it, we've got a problem.
-        // The loop structuring algorithm requires a unique back edge for each loop.
-        //
-        // There are 2 cases where this will happen:
-        //
-        // 1. A pre and post-tested loop share a header node, with the post-tested 2-way latching
-        //    node having a back edge to the header and an edge to the follow.
-        //    (e.g. pre-tested at start of post-tested body, `do { while(...) {...} } while(...)` )
-        // 2. A 2-way conditional has a follow node as a loop header, meaning the 2 branches
-        //    converge via back edges.
-        //    (e.g. if-else at end of pre-tested body, `while(...) { if(...) {...} else {...} }`)
-        //
-
         // We iterate in post-order, handling nested structures first. We do the traversal once at
         // the start to make sure we ignore placeholder nodes added by this function.
         let post_order = self.depth_first(Order::PostOrder);
@@ -259,5 +302,417 @@ impl ControlFlowGraph {
                 self.add_edge(placeholder, header);
             }
         }
+    }
+}
+
+#[allow(non_snake_case)]
+#[cfg(test)]
+mod tests {
+    use crate::function::structure::Structure;
+    use crate::tests::load_basic_blocks;
+    use classfile_parser::code_attribute::Instruction as JVMInstruction;
+
+    #[test]
+    fn basic_blocks_sequence() -> anyhow::Result<()> {
+        let g = load_basic_blocks("return 1;")?;
+        assert_eq!(g.len(), 1);
+        let entry = g.entry.unwrap();
+        assert_eq!(
+            g[entry].value,
+            Structure::Block(vec![JVMInstruction::Iconst1, JVMInstruction::Ireturn])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn basic_blocks_if() -> anyhow::Result<()> {
+        let g = load_basic_blocks(
+            "int a;
+            if (n > 1) { a = 1; } else { a = 2; };
+            return a;",
+        )?;
+        assert_eq!(g.len(), 4);
+
+        // Check entrypoint
+        let entry = g.entry.unwrap();
+        assert_eq!(
+            g[entry].value,
+            Structure::Block(vec![
+                JVMInstruction::Iload0,
+                JVMInstruction::Iconst1,
+                JVMInstruction::IfIcmple(8),
+            ])
+        );
+        assert_eq!(g[entry].successors.len(), 2);
+
+        // Check false/true branches
+        let false_node = g[entry].successors[0];
+        let true_node = g[entry].successors[1];
+        assert_eq!(
+            g[false_node].value,
+            Structure::Block(vec![
+                JVMInstruction::Iconst1,
+                JVMInstruction::Istore1,
+                JVMInstruction::Goto(5),
+            ])
+        );
+        assert_eq!(
+            g[true_node].value,
+            Structure::Block(vec![JVMInstruction::Iconst2, JVMInstruction::Istore1])
+        );
+        assert_eq!(g[false_node].successors.len(), 1);
+        assert_eq!(g[true_node].successors.len(), 1);
+
+        // Check follow
+        let false_follow = g[false_node].successors[0];
+        let true_follow = g[true_node].successors[0];
+        assert_eq!(false_follow, true_follow);
+        assert_eq!(
+            g[false_follow].value,
+            Structure::Block(vec![JVMInstruction::Iload1, JVMInstruction::Ireturn])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn basic_blocks_pre_tested_loop() -> anyhow::Result<()> {
+        let g = load_basic_blocks("while (n > 1) { n--; } return n;")?;
+        assert_eq!(g.len(), 3);
+
+        // Check entrypoint/header
+        let entry = g.entry.unwrap();
+        assert_eq!(
+            g[entry].value,
+            Structure::Block(vec![
+                JVMInstruction::Iload0,
+                JVMInstruction::Iconst1,
+                JVMInstruction::IfIcmple(9)
+            ])
+        );
+        assert_eq!(g[entry].successors.len(), 2);
+
+        // Check latching
+        let latching = g[entry].successors[0];
+        assert_eq!(
+            g[latching].value,
+            Structure::Block(vec![
+                JVMInstruction::Iinc {
+                    index: 0,
+                    value: -1
+                },
+                JVMInstruction::Goto(-8),
+            ])
+        );
+        assert_eq!(g[latching].successors, [entry]);
+
+        // Check follow
+        let follow = g[entry].successors[1];
+        assert_eq!(
+            g[follow].value,
+            Structure::Block(vec![JVMInstruction::Iload0, JVMInstruction::Ireturn])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn basic_blocks_post_tested_loop() -> anyhow::Result<()> {
+        let g = load_basic_blocks("do { n--; } while (n > 1); return n;")?;
+        assert_eq!(g.len(), 2);
+
+        // Check entrypoint/header/latching
+        let entry = g.entry.unwrap();
+        assert_eq!(
+            g[entry].value,
+            Structure::Block(vec![
+                JVMInstruction::Iinc {
+                    index: 0,
+                    value: -1
+                },
+                JVMInstruction::Iload0,
+                JVMInstruction::Iconst1,
+                JVMInstruction::IfIcmpgt(-5),
+            ])
+        );
+        assert_eq!(g[entry].successors.len(), 2);
+        assert_eq!(g[entry].successors[1], entry);
+
+        // Check follow
+        let follow = g[entry].successors[0];
+        assert_eq!(
+            g[follow].value,
+            Structure::Block(vec![JVMInstruction::Iload0, JVMInstruction::Ireturn])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn basic_blocks_nested_loops() -> anyhow::Result<()> {
+        let g = load_basic_blocks(
+            "do {
+                while (n > 2) { n--; }
+            } while (n > 1);
+            return n;",
+        )?;
+        assert_eq!(g.len(), 4);
+
+        // Check entry/inner-loop header
+        let entry = g.entry.unwrap();
+        assert_eq!(
+            g[entry].value,
+            Structure::Block(vec![
+                JVMInstruction::Iload0,
+                JVMInstruction::Iconst2,
+                JVMInstruction::IfIcmple(9),
+            ])
+        );
+        assert_eq!(g[entry].successors.len(), 2);
+
+        // Check inner-loop latching
+        let inner_latching = g[entry].successors[0];
+        assert_eq!(
+            g[inner_latching].value,
+            Structure::Block(vec![
+                JVMInstruction::Iinc {
+                    index: 0,
+                    value: -1
+                },
+                JVMInstruction::Goto(-8),
+            ])
+        );
+        assert_eq!(g[inner_latching].successors, [entry]);
+
+        // Check inner-loop follow/outer-loop latching
+        let outer_latching = g[entry].successors[1];
+        assert_eq!(
+            g[outer_latching].value,
+            Structure::Block(vec![
+                JVMInstruction::Iload0,
+                JVMInstruction::Iconst1,
+                JVMInstruction::IfIcmpgt(-13)
+            ])
+        );
+        assert_eq!(g[outer_latching].successors.len(), 2);
+        assert_eq!(g[outer_latching].successors[1], entry);
+
+        // Check outer-loop follow
+        let outer_follow = g[outer_latching].successors[0];
+        assert_eq!(
+            g[outer_follow].value,
+            Structure::Block(vec![JVMInstruction::Iload0, JVMInstruction::Ireturn])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn placeholders_pre_tested_at_start_of_post_tested() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks(
+            "do {
+                while (n > 2) { n--; }
+            } while (n > 1);
+            return n;",
+        )?;
+
+        // Check before inserting placeholders
+        assert_eq!(g.len(), 4);
+        // There are 2 loops here, so ideally our derived sequence will have 3 graphs: one for each
+        // loop and a trivial one at the end marking reducibility
+        let (G, _) = g.intervals_derived_sequence();
+        assert_eq!(G.len(), 2);
+
+        g.insert_placeholder_nodes();
+
+        // Check after inserting placeholders
+        assert_eq!(g.len(), 5);
+        let (G, _) = g.intervals_derived_sequence();
+        assert_eq!(G.len(), 3);
+
+        // Check entry (should be placeholder)
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].value, Structure::Block(vec![]));
+        assert_eq!(g[entry].successors.len(), 1);
+
+        // Check edges
+        let inner_header = g[entry].successors[0];
+        assert_eq!(g[inner_header].successors.len(), 2);
+        let inner_latching = g[inner_header].successors[0];
+        assert_eq!(g[inner_latching].successors, [inner_header]);
+        let outer_latching = g[inner_header].successors[1];
+        assert_eq!(g[outer_latching].successors.len(), 2);
+        let outer_follow = g[outer_latching].successors[0];
+        assert_eq!(g[outer_follow].successors.len(), 0);
+        assert_eq!(g[outer_latching].successors[1], entry);
+
+        Ok(())
+    }
+
+    #[test]
+    fn placeholders_if_else_at_end_of_pre_tested() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks(
+            "while (n > 1) {
+                if (n > 2) { n -= 2; } else { n--; }
+            }
+            return n;",
+        )?;
+
+        // Check placeholder inserted
+        assert_eq!(g.len(), 5);
+        g.insert_placeholder_nodes();
+        assert_eq!(g.len(), 6);
+
+        // Check entrypoint/loop header
+        let entry = g.entry.unwrap();
+        assert_eq!(
+            g[entry].value,
+            Structure::Block(vec![
+                JVMInstruction::Iload0,
+                JVMInstruction::Iconst1,
+                JVMInstruction::IfIcmple(20),
+            ])
+        );
+        assert_eq!(g[entry].successors.len(), 2);
+
+        // Check 2-way conditional header
+        let conditional_header = g[entry].successors[0];
+        assert_eq!(
+            g[conditional_header].value,
+            Structure::Block(vec![
+                JVMInstruction::Iload0,
+                JVMInstruction::Iconst2,
+                JVMInstruction::IfIcmple(9),
+            ])
+        );
+        assert_eq!(g[conditional_header].successors.len(), 2);
+
+        // Check false/true branches
+        let false_node = g[conditional_header].successors[0];
+        let true_node = g[conditional_header].successors[1];
+        assert_eq!(
+            g[false_node].value,
+            Structure::Block(vec![
+                JVMInstruction::Iinc {
+                    index: 0,
+                    value: -2
+                },
+                JVMInstruction::Goto(-13), // Note two back edges to same node
+            ])
+        );
+        assert_eq!(
+            g[true_node].value,
+            Structure::Block(vec![
+                JVMInstruction::Iinc {
+                    index: 0,
+                    value: -1
+                },
+                JVMInstruction::Goto(-19) // Note two back edges to same node
+            ])
+        );
+        assert_eq!(g[false_node].successors.len(), 1);
+        assert_eq!(g[true_node].successors.len(), 1);
+
+        // Check 2-way conditional follow (should be placeholder)
+        let false_follow_node = g[false_node].successors[0];
+        let true_follow_node = g[true_node].successors[0];
+        assert_eq!(false_follow_node, true_follow_node);
+        assert_eq!(g[false_follow_node].value, Structure::Block(vec![]));
+        assert_eq!(g[false_follow_node].successors, [entry]);
+
+        // Check loop follow
+        let loop_follow = g[entry].successors[1];
+        assert_eq!(
+            g[loop_follow].value,
+            Structure::Block(vec![JVMInstruction::Iload0, JVMInstruction::Ireturn])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn placeholder_if_else_at_end_of_pre_tested_at_start_of_post_tested() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks(
+            "do {
+                while (n > 1) {
+                    if (n > 2) { n -= 2; } else { n--; };
+                }
+            } while (n > 3);
+            return n;",
+        )?;
+
+        // Check placeholders inserted
+        assert_eq!(g.len(), 6);
+        let (G, _) = g.intervals_derived_sequence();
+        assert_eq!(G.len(), 2);
+        g.insert_placeholder_nodes();
+        assert_eq!(g.len(), 8);
+        let (G, _) = g.intervals_derived_sequence();
+        assert_eq!(G.len(), 3 /* inner loop, outer loop, trivial graph */);
+
+        // Check edges
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].value, Structure::Block(vec![])); // placeholder
+        assert_eq!(g[entry].successors.len(), 1);
+        let inner_loop_header = g[entry].successors[0];
+        assert_eq!(g[inner_loop_header].successors.len(), 2);
+        let conditional_header = g[inner_loop_header].successors[0];
+        let outer_loop_latching = g[inner_loop_header].successors[1];
+        assert_eq!(g[conditional_header].successors.len(), 2);
+        let false_node = g[conditional_header].successors[0];
+        let true_node = g[conditional_header].successors[1];
+        assert_eq!(g[false_node].successors.len(), 1);
+        assert_eq!(g[true_node].successors.len(), 1);
+        let false_follow = g[false_node].successors[0];
+        let true_follow = g[true_node].successors[0];
+        assert_eq!(false_follow, true_follow);
+        assert_eq!(g[false_follow].value, Structure::Block(vec![])); // placeholder
+        assert_eq!(g[false_follow].successors, [inner_loop_header]);
+        assert_eq!(g[outer_loop_latching].successors.len(), 2);
+        assert_eq!(g[outer_loop_latching].successors[1], entry);
+
+        Ok(())
+    }
+
+    #[test]
+    fn placeholder_if_at_end_of_pre_tested_at_start_of_post_tested() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks(
+            "do {
+                while (n > 2) {
+                    if (n > 1) { n--; };
+                }
+            } while (n > 3);
+            return n;",
+        )?;
+
+        // Check placeholders inserted
+        assert_eq!(g.len(), 5);
+        let (G, _) = g.intervals_derived_sequence();
+        assert_eq!(G.len(), 2);
+        g.insert_placeholder_nodes();
+        assert_eq!(g.len(), 7);
+        let (G, _) = g.intervals_derived_sequence();
+        assert_eq!(G.len(), 3 /* inner loop, outer loop, trivial graph */);
+
+        // Check edges
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].value, Structure::Block(vec![])); // placeholder
+        assert_eq!(g[entry].successors.len(), 1);
+        let inner_loop_header = g[entry].successors[0];
+        assert_eq!(g[inner_loop_header].successors.len(), 2);
+        let conditional_header = g[inner_loop_header].successors[0];
+        let outer_loop_latching = g[inner_loop_header].successors[1];
+        assert_eq!(g[conditional_header].successors.len(), 2);
+        let false_node = g[conditional_header].successors[0];
+        let true_node = g[conditional_header].successors[1];
+        assert_eq!(g[false_node].successors.len(), 1);
+        let false_follow = g[false_node].successors[0];
+        assert_eq!(false_follow, true_node); // Note conditional true branch is follow directly
+        assert_eq!(g[false_follow].value, Structure::Block(vec![])); // placeholder
+        assert_eq!(g[false_follow].successors, [inner_loop_header]);
+        assert_eq!(g[outer_loop_latching].successors.len(), 2);
+        assert_eq!(g[outer_loop_latching].successors[1], entry);
+
+        Ok(())
     }
 }
