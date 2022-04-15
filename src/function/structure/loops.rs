@@ -3,7 +3,7 @@ use crate::graph::{Graph, NodeId, NodeMap, NodeSet, Order};
 use std::fmt;
 
 /// Possible loop type for [`Loop`].
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum LoopKind {
     /// Evaluate condition before evaluating body (e.g. `while` loop).
     PreTested,
@@ -13,7 +13,7 @@ pub enum LoopKind {
 }
 
 /// Identified pre-/post-tested loop in a [`ControlFlowGraph`].
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Loop {
     /// Whether condition is evaluated before or after body.
     pub kind: LoopKind,
@@ -201,5 +201,284 @@ impl ControlFlowGraph {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::function::structure::{ConditionalKind, ControlFlowGraph, LoopKind, Structure};
+    use crate::tests::load_basic_blocks;
+
+    #[test]
+    fn invalid_loop_irreducible_flow() {
+        // Construct canonical irreducible flow graph
+        let mut g = ControlFlowGraph::new();
+        let entry = g.add_node(Structure::default());
+        let left = g.add_node(Structure::default());
+        let right = g.add_node(Structure::default());
+        g.add_edge(entry, left);
+        g.add_edge(entry, right);
+        g.add_edge(left, right);
+        g.add_edge(right, left);
+        let err = g.find_loops().unwrap_err();
+        assert_eq!(
+            format!("{}", err),
+            "Irreducible flow graphs are not yet supported"
+        );
+    }
+
+    #[test]
+    fn loop_case_1_pre_tested_unconditional_latching() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks("while (n > 1) { n--; } return n;")?;
+        g.insert_placeholder_nodes();
+        g.structure_compound_conditionals();
+        let loops = g.find_loops()?;
+        assert_eq!(loops.iter().count(), 1);
+
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].successors.len(), 2);
+        let latching = g[entry].successors[0];
+        let follow = g[entry].successors[1];
+        let loop_info = loops[entry];
+        assert_eq!(loop_info.kind, LoopKind::PreTested);
+        assert_eq!(loop_info.header, entry);
+        assert_eq!(loop_info.latching, latching);
+        assert_eq!(loop_info.follow, follow);
+
+        Ok(())
+    }
+
+    #[test]
+    fn loop_case_2_pre_tested_conditional_latching() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks(
+            "while (n > 1) {
+                if (n > 2) { n -= 2; } else { n--; }
+            }
+            return n;",
+        )?;
+        g.insert_placeholder_nodes();
+        g.structure_compound_conditionals();
+        let loops = g.find_loops()?;
+        assert_eq!(loops.iter().count(), 1);
+
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].successors.len(), 2);
+        let follow = g[entry].successors[1];
+        let loop_info = loops[entry];
+        assert_eq!(loop_info.kind, LoopKind::PreTested);
+        assert_eq!(loop_info.header, entry);
+        assert_eq!(loop_info.follow, follow);
+        assert_eq!(g[loop_info.latching].value, Structure::default()); // placeholder
+
+        Ok(())
+    }
+
+    #[test]
+    fn loop_case_3_post_tested_conditional_header() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks(
+            "do {
+                if (n > 2) { n -= 2; } else { n--; }
+            } while (n > 1);
+            return n;",
+        )?;
+        g.insert_placeholder_nodes();
+        g.structure_compound_conditionals();
+        let loops = g.find_loops()?;
+        assert_eq!(loops.iter().count(), 1);
+
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].successors.len(), 2); // 2-way conditional header node
+        let loop_info = loops[entry];
+        assert_eq!(loop_info.kind, LoopKind::PostTested);
+        assert_eq!(loop_info.header, entry);
+        assert_eq!(g[loop_info.latching].successors.len(), 2);
+        assert_eq!(g[loop_info.latching].successors[1], entry);
+        let follow = g[loop_info.latching].successors[0];
+        assert_eq!(loop_info.follow, follow);
+        assert_eq!(g[follow].successors.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn loop_case_4_post_tested_unconditional_header() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks("do { n--; } while (n > 1); return n;")?;
+        g.insert_placeholder_nodes();
+        g.structure_compound_conditionals();
+        let loops = g.find_loops()?;
+        assert_eq!(loops.iter().count(), 1);
+
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].successors.len(), 2); // post-tested latching node
+        let loop_info = loops[entry];
+        // This is detected as a single node pre-tested loop, but handled as a post-tested loop
+        assert_eq!(loop_info.kind, LoopKind::PreTested);
+        assert_eq!(loop_info.header, entry);
+        assert_eq!(loop_info.latching, entry);
+        let follow = g[entry].successors[0];
+        assert_eq!(loop_info.follow, follow);
+        assert_eq!(g[follow].successors.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_loop_case_5_endless() -> anyhow::Result<()> {
+        let g = load_basic_blocks("while (true) {}")?;
+        let err = g.find_loops().unwrap_err();
+        assert_eq!(format!("{}", err), "Endless loops are not yet supported");
+        Ok(())
+    }
+
+    #[test]
+    fn loop_nested_pre_tested_inside_post_tested() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks(
+            "do {
+                while (n > 2) { n--; }
+            } while (n > 1);
+            return n;",
+        )?;
+        g.insert_placeholder_nodes();
+        g.structure_compound_conditionals();
+        let loops = g.find_loops()?;
+        assert_eq!(loops.iter().count(), 2);
+
+        let entry = g.entry.unwrap();
+        let post_tested_loop = loops[entry];
+        assert_eq!(post_tested_loop.kind, LoopKind::PostTested);
+        assert_eq!(post_tested_loop.header, entry);
+        assert_eq!(g[entry].successors.len(), 1);
+        let pre_tested_loop_header = g[entry].successors[0];
+        let pre_tested_loop = loops[pre_tested_loop_header];
+        assert_eq!(pre_tested_loop.kind, LoopKind::PreTested);
+        assert_eq!(pre_tested_loop.header, pre_tested_loop_header);
+        assert_eq!(g[pre_tested_loop_header].successors.len(), 2);
+        let pre_tested_loop_follow = g[pre_tested_loop_header].successors[1];
+        assert_eq!(pre_tested_loop.follow, pre_tested_loop_follow);
+        assert_eq!(g[pre_tested_loop_follow].successors.len(), 2);
+        assert_eq!(g[pre_tested_loop_follow].successors[1], entry);
+        assert_eq!(post_tested_loop.latching, pre_tested_loop_follow);
+
+        Ok(())
+    }
+
+    #[test]
+    fn loop_nested_post_tested_inside_pre_tested() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks(
+            "while (n > 2) {
+                do { n--; } while (n > 1);
+            }
+            return n;",
+        )?;
+        g.insert_placeholder_nodes();
+        g.structure_compound_conditionals();
+        let loops = g.find_loops()?;
+        assert_eq!(loops.iter().count(), 2);
+
+        let entry = g.entry.unwrap();
+        assert_eq!(g[entry].successors.len(), 2);
+        let post_tested_loop_header_latching = g[entry].successors[0];
+        let pre_tested_follow = g[entry].successors[1];
+
+        let pre_tested_loop = loops[entry];
+        assert_eq!(pre_tested_loop.kind, LoopKind::PreTested);
+        assert_eq!(pre_tested_loop.header, entry);
+        assert_eq!(pre_tested_loop.follow, pre_tested_follow);
+
+        let post_tested_loop = loops[post_tested_loop_header_latching];
+        // This is detected as a single node pre-tested loop, but handled as a post-tested loop
+        assert_eq!(post_tested_loop.kind, LoopKind::PreTested);
+        assert_eq!(post_tested_loop.header, post_tested_loop_header_latching);
+        assert_eq!(post_tested_loop.latching, post_tested_loop_header_latching);
+        assert_eq!(post_tested_loop.follow, pre_tested_loop.latching);
+
+        Ok(())
+    }
+
+    #[test]
+    fn loop_nested_pre_tested_inside_if_inside_post_tested() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks(
+            "do {
+                if (n == 2) {
+                    n = 1;
+                } else {
+                    while (n > 2) {
+                        n -= 2;
+                    }
+                }
+            } while (n > 1);
+            return n;",
+        )?;
+        g.insert_placeholder_nodes();
+        g.structure_compound_conditionals();
+        let loops = g.find_loops()?;
+        assert_eq!(loops.iter().count(), 2);
+
+        // Extract key nodes
+        let entry = g.entry.unwrap(); // if (n == 2) {
+        assert_eq!(g[entry].successors.len(), 2);
+        let false_node = g[entry].successors[0]; // n = 1;
+        let true_node = g[entry].successors[1]; // while (n > 2) {
+        assert_eq!(g[false_node].successors.len(), 1);
+        assert_eq!(g[true_node].successors.len(), 2);
+        let post_tested_loop_latching = g[false_node].successors[0]; // } while (n > 1)
+        let pre_tested_loop_latching = g[true_node].successors[0]; // n -= 2;
+        assert_eq!(g[true_node].successors[1], post_tested_loop_latching);
+        assert_eq!(g[post_tested_loop_latching].successors.len(), 2);
+        let post_tested_loop_follow = g[post_tested_loop_latching].successors[0]; // return n;
+
+        // Check loops
+        let post_tested_loop = loops[entry];
+        assert_eq!(post_tested_loop.kind, LoopKind::PostTested);
+        assert_eq!(post_tested_loop.header, entry);
+        assert_eq!(post_tested_loop.latching, post_tested_loop_latching);
+        assert_eq!(post_tested_loop.follow, post_tested_loop_follow);
+        let pre_tested_loop = loops[true_node];
+        assert_eq!(pre_tested_loop.kind, LoopKind::PreTested);
+        assert_eq!(pre_tested_loop.header, true_node);
+        assert_eq!(pre_tested_loop.latching, pre_tested_loop_latching);
+        assert_eq!(pre_tested_loop.follow, post_tested_loop_latching);
+
+        Ok(())
+    }
+
+    #[test]
+    fn loop_compound_conditional() -> anyhow::Result<()> {
+        let mut g = load_basic_blocks(
+            "boolean a = false; boolean b = false;
+            while (a && b) { n--; }
+            return n;",
+        )?;
+        g.insert_placeholder_nodes();
+        g.structure_compound_conditionals();
+        let loops = g.find_loops()?;
+        assert_eq!(loops.iter().count(), 1);
+
+        // Extract key nodes
+        let entry = g.entry.unwrap(); // boolean a = false; boolean b = false;
+        assert_eq!(g[entry].successors.len(), 1);
+        let header = g[entry].successors[0]; // while (a && b) {
+        assert_eq!(g[header].successors.len(), 2);
+        let latching = g[header].successors[0]; // n--;
+        let follow = g[header].successors[1]; // return n;
+
+        // Check loop
+        let loop_info = loops[header];
+        assert_eq!(loop_info.kind, LoopKind::PreTested);
+        assert_eq!(loop_info.header, header);
+        assert_eq!(loop_info.latching, latching);
+        assert_eq!(loop_info.follow, follow);
+
+        // Check loop header is compound conditional
+        assert!(matches!(
+            g[header].value,
+            Structure::CompoundConditional {
+                left_negated: false,
+                kind: ConditionalKind::Disjunction,
+                ..
+            }
+        ));
+
+        Ok(())
     }
 }

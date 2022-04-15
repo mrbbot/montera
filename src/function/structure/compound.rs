@@ -194,8 +194,7 @@ impl ControlFlowGraph {
 #[cfg(test)]
 mod tests {
     use crate::function::structure::{ConditionalKind, ControlFlowGraph, Structure};
-    use crate::graph::{DotOptions, NodeId};
-    use crate::run_graphviz;
+    use crate::graph::NodeId;
     use crate::tests::load_basic_blocks;
     use classfile_parser::code_attribute::Instruction as JVMInstruction;
 
