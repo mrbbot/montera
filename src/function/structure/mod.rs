@@ -87,13 +87,7 @@ pub fn structure_code(
 
     // Structure conditionals, excluding loop headers/latching nodes, but including short-circuit
     // conditionals from earlier
-    let ignored_headers = loops
-        .values()
-        .map(|l| match l.kind {
-            LoopKind::PreTested => l.header,
-            LoopKind::PostTested => l.latching,
-        })
-        .collect();
+    let ignored_headers = ignored_loop_headers(&loops);
     let conditionals = g.find_2_way_conditionals(&ignored_headers);
 
     let structured = StructuredCode {
