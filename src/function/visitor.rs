@@ -9,6 +9,14 @@ use std::sync::Arc;
 use wasm_encoder::ValType;
 use wasm_encoder::{BlockType, Instruction as WASMInstruction};
 
+/// WebAssembly generation visiting phase operating on individual functions.
+/// Performed in parallel by [`crate::function::CompileFunctionJob`].
+///
+/// The visiting phase takes a structured control flow graph, with identified loops and 2-way
+/// conditionals, and produces a list of WebAssembly instructions. Pseudo-instructions are produced
+/// for operations requiring custom built-in WebAssembly functions, or program-wide information such
+/// as the virtual method table. These are lowered to real WebAssembly instructions in the rendering
+/// phase. See [`Instruction`] for more details.
 pub struct Visitor {
     pub const_pool: Arc<ConstantPool>,
     pub locals: Arc<LocalInterpretation>,
@@ -16,6 +24,11 @@ pub struct Visitor {
 }
 
 impl Visitor {
+    /// Translates a single JVM instruction into one or more WebAssembly (pseudo-)instructions.
+    ///
+    /// This is arguably the most important function in the project. An exhaustive `match` statement
+    /// ensures all parsed JVM instructions are handled or explicitly marked as unimplemented.
+    /// If instructions are added in the future, a compile time error will be produced.
     fn visit(
         &self,
         out: &mut Vec<Instruction<'_>>,
@@ -366,6 +379,8 @@ impl Visitor {
         Ok(())
     }
 
+    /// Translates a [`Structure`] (either a basic block or compound short-circuit conditional) into
+    /// one or more WebAssembly (pseudo-)instructions.
     fn visit_struct(
         &self,
         out: &mut Vec<Instruction<'_>>,
@@ -373,6 +388,7 @@ impl Visitor {
     ) -> anyhow::Result<()> {
         match structure {
             Structure::Block(instructions) => {
+                // Basic block, visit all instructions in sequence
                 for instruction in instructions {
                     self.visit(out, instruction)?;
                 }
@@ -383,7 +399,11 @@ impl Visitor {
                 left,
                 right,
             } => {
+                // Short-circuit conditional, always visit left branch, then maybe short-circuit
+                // evaluation of right branch
                 self.visit_struct(out, &left)?;
+                // Loop/2-way conditional headers/latchings expect an `i32` value on the top of the
+                // stack, so produce an `if` expression, for early returns, evaluating to an `i32`
                 out.push(I(WASMInstruction::If(BlockType::Result(ValType::I32))));
                 match (left_negated, kind) {
                     // if left && right
@@ -399,7 +419,7 @@ impl Visitor {
                         // if NEGATED condition is TRUE, !left is FALSE, conjunction must be FALSE, short-circuit
                         out.push(I(WASMInstruction::I32Const(0)));
                         out.push(I(WASMInstruction::Else));
-                        // else left is TRUE, check right too
+                        // else !left is TRUE, check right too
                         self.visit_struct(out, right)?;
                     }
                     // if left || right
@@ -415,7 +435,7 @@ impl Visitor {
                         // if NEGATED condition is TRUE, !left is FALSE, check right too
                         self.visit_struct(out, right)?;
                         out.push(I(WASMInstruction::Else));
-                        // else left is TRUE, disjunction must be TRUE, short-circuit
+                        // else !left is TRUE, disjunction must be TRUE, short-circuit
                         out.push(I(WASMInstruction::I32Const(1)));
                     }
                 };
@@ -425,6 +445,8 @@ impl Visitor {
         Ok(())
     }
 
+    /// Translates a control flow graph node containing a [`Structure`] (either a basic block or
+    /// compound short-circuit conditional) into one or more WebAssembly (pseudo-)instructions.
     #[inline]
     fn visit_node(
         &self,
@@ -434,6 +456,8 @@ impl Visitor {
         self.visit_struct(out, &node.value)
     }
 
+    /// Translates a structured [`Loop`] (with identified type, header, latching and follow node)
+    /// into multiple WebAssembly (pseudo-)instructions.
     fn visit_loop(&self, out: &mut Vec<Instruction<'_>>, loop_info: Loop) -> anyhow::Result<()> {
         // Allow easily breaking out of the loop...
         out.push(I(WASMInstruction::Block(BlockType::Empty)));
@@ -501,6 +525,8 @@ impl Visitor {
         Ok(())
     }
 
+    /// Translates a structured 2-way conditional (with identified header and follow node) into
+    /// multiple WebAssembly (pseudo-)instructions.
     fn visit_conditional(
         &self,
         out: &mut Vec<Instruction<'_>>,
@@ -509,23 +535,33 @@ impl Visitor {
     ) -> anyhow::Result<()> {
         let node = &self.code.g[header];
         assert_eq!(node.out_degree(), 2);
-        let true_branch = node.successors[1];
-        let false_branch = node.successors[0];
+        let true_node = node.successors[1];
+        let false_node = node.successors[0];
 
         self.visit_node(out, node)?;
         out.push(I(WASMInstruction::If(BlockType::Empty)));
         {
-            self.visit_until(out, true_branch, Some(follow), false)?;
+            self.visit_until(out, true_node, Some(follow), false)?;
         }
         out.push(I(WASMInstruction::Else));
         {
-            self.visit_until(out, false_branch, Some(follow), false)?;
+            self.visit_until(out, false_node, Some(follow), false)?;
         }
         out.push(I(WASMInstruction::End));
 
         Ok(())
     }
 
+    /// Translates all nodes from `n` up `until` an optional node into one or more WebAssembly
+    /// (pseudo-)instructions.
+    ///
+    /// Setting `n` to the control flow graph's entrypoint and `until` to `None` will translate the
+    /// entire function.
+    ///
+    /// If `ignore_first_loop` is `true`, the first visited node `n` will not be considered as a
+    /// potential loop. If this function is called when visiting the header of a post-tested loop
+    /// (which may be a 2-way conditional header), this must be set to `true` to avoid infinite
+    /// recursion.
     fn visit_until(
         &self,
         out: &mut Vec<Instruction<'_>>,
@@ -565,6 +601,12 @@ impl Visitor {
         Ok(())
     }
 
+    /// Translates the entire JVM bytecode function into one or more WebAssembly
+    /// (pseudo-)instructions.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the control flow graph doesn't have an entrypoint.
     pub fn visit_all(&self, out: &mut Vec<Instruction<'_>>) -> anyhow::Result<()> {
         let start = self.code.g.entry.expect("visit_all needs entrypoint");
         self.visit_until(out, start, None, false)?;
