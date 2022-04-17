@@ -16,15 +16,18 @@ pub struct Visitor {
 }
 
 impl Visitor {
-    fn visit(&self, out: &mut Vec<Instruction<'_>>, instruction: &JVMInstruction) {
+    fn visit(
+        &self,
+        out: &mut Vec<Instruction<'_>>,
+        instruction: &JVMInstruction,
+    ) -> anyhow::Result<()> {
         let const_pool = &*self.const_pool;
         let locals = &self.locals;
         // Instructions defined here: https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-6.html
         // Unimplemented instructions have the blocking feature in brackets.
-        // TODO: return result instead of panicking on unimplemented
         match instruction {
-            JVMInstruction::Aaload => unimplemented!("Aaload (Array)"),
-            JVMInstruction::Aastore => unimplemented!("Aastore (Array)"),
+            JVMInstruction::Aaload => bail!("Aaload instruction unimplemented (Array)"),
+            JVMInstruction::Aastore => bail!("Aastore instruction unimplemented (Array)"),
             JVMInstruction::Aconstnull => out.push(I(WASMInstruction::I32Const(0))),
             JVMInstruction::Aload(n) => locals.get(out, ValType::I32, *n as u32),
             JVMInstruction::AloadWide(n) => locals.get(out, ValType::I32, *n as u32),
@@ -32,9 +35,9 @@ impl Visitor {
             JVMInstruction::Aload1 => locals.get(out, ValType::I32, 1),
             JVMInstruction::Aload2 => locals.get(out, ValType::I32, 2),
             JVMInstruction::Aload3 => locals.get(out, ValType::I32, 3),
-            JVMInstruction::Anewarray(_) => unimplemented!("Anewarray (Array)"),
+            JVMInstruction::Anewarray(_) => bail!("Anewarray instruction unimplemented (Array)"),
             JVMInstruction::Areturn => out.push(I(WASMInstruction::Return)),
-            JVMInstruction::Arraylength => unimplemented!("Arraylength (Array)"),
+            JVMInstruction::Arraylength => bail!("Arraylength instruction unimplemented (Array)"),
             JVMInstruction::Astore(n) => locals.set(out, ValType::I32, *n as u32),
             JVMInstruction::AstoreWide(n) => locals.set(out, ValType::I32, *n as u32),
             JVMInstruction::Astore0 => locals.set(out, ValType::I32, 0),
@@ -46,18 +49,20 @@ impl Visitor {
                 // In this case, emit an unreachable instruction to cause a trap.
                 out.push(I(WASMInstruction::Unreachable))
             }
-            JVMInstruction::Baload => unimplemented!("Baload (Array)"),
-            JVMInstruction::Bastore => unimplemented!("Bastore (Array)"),
+            JVMInstruction::Baload => bail!("Baload instruction unimplemented (Array)"),
+            JVMInstruction::Bastore => bail!("Bastore instruction unimplemented (Array)"),
             JVMInstruction::Bipush(n) => out.push(I(WASMInstruction::I32Const(*n as i32))),
-            JVMInstruction::Caload => unimplemented!("Caload (Array)"),
-            JVMInstruction::Castore => unimplemented!("Castore (Array)"),
-            JVMInstruction::Checkcast(_) => unimplemented!("Checkcast (Exception)"),
+            JVMInstruction::Caload => bail!("Caload instruction unimplemented (Array)"),
+            JVMInstruction::Castore => bail!("Castore instruction unimplemented (Array)"),
+            JVMInstruction::Checkcast(_) => {
+                bail!("Checkcast instruction unimplemented (Exception)")
+            }
             JVMInstruction::D2f => out.push(I(WASMInstruction::F32DemoteF64)),
             JVMInstruction::D2i => out.push(I(WASMInstruction::I32TruncF64S)),
             JVMInstruction::D2l => out.push(I(WASMInstruction::I64TruncF64S)),
             JVMInstruction::Dadd => out.push(I(WASMInstruction::F64Add)),
-            JVMInstruction::Daload => unimplemented!("Daload (Array)"),
-            JVMInstruction::Dastore => unimplemented!("Dastore (Array)"),
+            JVMInstruction::Daload => bail!("Daload instruction unimplemented (Array)"),
+            JVMInstruction::Dastore => bail!("Dastore instruction unimplemented (Array)"),
             JVMInstruction::Dcmpg => out.push(Instruction::DoubleCmp(NaNBehaviour::Greater)),
             JVMInstruction::Dcmpl => out.push(Instruction::DoubleCmp(NaNBehaviour::Lesser)),
             JVMInstruction::Dconst0 => out.push(I(WASMInstruction::F64Const(0.0))),
@@ -71,7 +76,7 @@ impl Visitor {
             JVMInstruction::Dload3 => locals.get(out, ValType::F64, 3),
             JVMInstruction::Dmul => out.push(I(WASMInstruction::F64Mul)),
             JVMInstruction::Dneg => out.push(I(WASMInstruction::F64Neg)),
-            JVMInstruction::Drem => unimplemented!("Drem"), // TODO: implement
+            JVMInstruction::Drem => bail!("Drem instruction unimplemented"), // TODO: implement
             JVMInstruction::Dreturn => out.push(I(WASMInstruction::Return)),
             JVMInstruction::Dstore(n) => locals.set(out, ValType::F64, *n as u32),
             JVMInstruction::DstoreWide(n) => locals.set(out, ValType::F64, *n as u32),
@@ -93,17 +98,17 @@ impl Visitor {
             // Therefore, if this instruction is produced, we add an additional i32 scratch local
             // to the function, and use local_tee/get instructions to duplicate the value.
             JVMInstruction::Dup => out.push(Instruction::Dup),
-            JVMInstruction::Dupx1 => unimplemented!("Dupx1 (Stack Type)"),
-            JVMInstruction::Dupx2 => unimplemented!("Dupx2 (Stack Type)"),
-            JVMInstruction::Dup2 => unimplemented!("Dup2 (Stack Type)"),
-            JVMInstruction::Dup2x1 => unimplemented!("Dup2x1 (Stack Type)"),
-            JVMInstruction::Dup2x2 => unimplemented!("Dup2x2 (Stack Type)"),
+            JVMInstruction::Dupx1 => bail!("Dupx1 instruction unimplemented (Stack Type)"),
+            JVMInstruction::Dupx2 => bail!("Dupx2 instruction unimplemented (Stack Type)"),
+            JVMInstruction::Dup2 => bail!("Dup2 instruction unimplemented (Stack Type)"),
+            JVMInstruction::Dup2x1 => bail!("Dup2x1 instruction unimplemented (Stack Type)"),
+            JVMInstruction::Dup2x2 => bail!("Dup2x2 instruction unimplemented (Stack Type)"),
             JVMInstruction::F2d => out.push(I(WASMInstruction::F64PromoteF32)),
             JVMInstruction::F2i => out.push(I(WASMInstruction::I32TruncF32S)),
             JVMInstruction::F2l => out.push(I(WASMInstruction::I64TruncF32S)),
             JVMInstruction::Fadd => out.push(I(WASMInstruction::F32Add)),
-            JVMInstruction::Faload => unimplemented!("Faload (Array)"),
-            JVMInstruction::Fastore => unimplemented!("Fastore (Array)"),
+            JVMInstruction::Faload => bail!("Faload instruction unimplemented (Array)"),
+            JVMInstruction::Fastore => bail!("Fastore instruction unimplemented (Array)"),
             JVMInstruction::Fcmpg => out.push(Instruction::FloatCmp(NaNBehaviour::Greater)),
             JVMInstruction::Fcmpl => out.push(Instruction::FloatCmp(NaNBehaviour::Lesser)),
             JVMInstruction::Fconst0 => out.push(I(WASMInstruction::F32Const(0.0))),
@@ -118,7 +123,7 @@ impl Visitor {
             JVMInstruction::Fload3 => locals.get(out, ValType::F32, 3),
             JVMInstruction::Fmul => out.push(I(WASMInstruction::F32Mul)),
             JVMInstruction::Fneg => out.push(I(WASMInstruction::F32Neg)),
-            JVMInstruction::Frem => unimplemented!("Frem"), // TODO: implement
+            JVMInstruction::Frem => bail!("Frem instruction unimplemented"), // TODO: implement
             JVMInstruction::Freturn => out.push(I(WASMInstruction::Return)),
             JVMInstruction::Fstore(n) => locals.set(out, ValType::F32, *n as u32),
             JVMInstruction::FstoreWide(n) => locals.set(out, ValType::F32, *n as u32),
@@ -138,7 +143,7 @@ impl Visitor {
                     // Always enable assertions
                     out.push(I(WASMInstruction::I32Const(0)));
                 } else {
-                    unimplemented!("Getstatic (Static Field)")
+                    bail!("Getstatic instruction unimplemented (Static Field)")
                 }
             }
             JVMInstruction::Goto(_) => out.push(I(WASMInstruction::Nop)),
@@ -150,9 +155,9 @@ impl Visitor {
             JVMInstruction::I2l => out.push(I(WASMInstruction::I64ExtendI32S)),
             JVMInstruction::I2s => out.push(I(WASMInstruction::Nop)),
             JVMInstruction::Iadd => out.push(I(WASMInstruction::I32Add)),
-            JVMInstruction::Iaload => unimplemented!("Iaload (Array)"),
+            JVMInstruction::Iaload => bail!("Iaload instruction unimplemented (Array)"),
             JVMInstruction::Iand => out.push(I(WASMInstruction::I32And)),
-            JVMInstruction::Iastore => unimplemented!("Iastore (Array)"),
+            JVMInstruction::Iastore => bail!("Iastore instruction unimplemented (Array)"),
             JVMInstruction::Iconstm1 => out.push(I(WASMInstruction::I32Const(-1))),
             JVMInstruction::Iconst0 => out.push(I(WASMInstruction::I32Const(0))),
             JVMInstruction::Iconst1 => out.push(I(WASMInstruction::I32Const(1))),
@@ -221,8 +226,12 @@ impl Visitor {
                 let class_name = const_pool.class_name(*n);
                 out.push(Instruction::InstanceOf(class_name));
             }
-            JVMInstruction::Invokedynamic(_) => unimplemented!("Invokedynamic (Dynamic Type)"),
-            JVMInstruction::Invokeinterface { .. } => unimplemented!("Invokeinterface (Interface)"),
+            JVMInstruction::Invokedynamic(_) => {
+                bail!("Invokedynamic instruction unimplemented (Dynamic Type)")
+            }
+            JVMInstruction::Invokeinterface { .. } => {
+                bail!("Invokeinterface instruction unimplemented (Interface)")
+            }
             JVMInstruction::Invokespecial(n) => {
                 let id = const_pool.method(*n);
                 if *id.class_name == JAVA_LANG_OBJECT && *id.name == "<init>" {
@@ -254,34 +263,34 @@ impl Visitor {
             JVMInstruction::Isub => out.push(I(WASMInstruction::I32Sub)),
             JVMInstruction::Iushr => out.push(I(WASMInstruction::I32ShrU)),
             JVMInstruction::Ixor => out.push(I(WASMInstruction::I32Xor)),
-            JVMInstruction::Jsr(_) => unimplemented!("Jsr (Irreducible)"),
-            JVMInstruction::JsrW(_) => unimplemented!("JsrW (Irreducible)"),
+            JVMInstruction::Jsr(_) => bail!("Jsr instruction unimplemented (Irreducible)"),
+            JVMInstruction::JsrW(_) => bail!("JsrW instruction unimplemented (Irreducible)"),
             JVMInstruction::L2d => out.push(I(WASMInstruction::F64ConvertI64S)),
             JVMInstruction::L2f => out.push(I(WASMInstruction::F32ConvertI64S)),
             JVMInstruction::L2i => out.push(I(WASMInstruction::I32WrapI64)),
             JVMInstruction::Ladd => out.push(I(WASMInstruction::I64Add)),
-            JVMInstruction::Laload => unimplemented!("Laload (Array)"),
+            JVMInstruction::Laload => bail!("Laload instruction unimplemented (Array)"),
             JVMInstruction::Land => out.push(I(WASMInstruction::I64And)),
-            JVMInstruction::Lastore => unimplemented!("Lastore (Array)"),
+            JVMInstruction::Lastore => bail!("Lastore instruction unimplemented (Array)"),
             JVMInstruction::Lcmp => out.push(Instruction::LongCmp),
             JVMInstruction::Lconst0 => out.push(I(WASMInstruction::I64Const(0))),
             JVMInstruction::Lconst1 => out.push(I(WASMInstruction::I64Const(1))),
             JVMInstruction::Ldc(n) => {
-                // TODO (someday): Ldc can be reference to String, Class or Method
                 let num = const_pool.num(*n as u16);
                 out.push(match num {
                     NumericConstant::Integer(num) => I(WASMInstruction::I32Const(num)),
                     NumericConstant::Float(num) => I(WASMInstruction::F32Const(num)),
-                    _ => unimplemented!("Only int/float constants supported for Ldc"),
+                    // TODO (someday): Ldc can be reference to String, Class or Method
+                    _ => bail!("Ldc constants other than int/float unimplemented"),
                 })
             }
             JVMInstruction::LdcW(n) => {
-                // TODO (someday): LdcW can be reference to String, Class or Method
                 let num = const_pool.num(*n);
                 out.push(match num {
                     NumericConstant::Integer(num) => I(WASMInstruction::I32Const(num)),
                     NumericConstant::Float(num) => I(WASMInstruction::F32Const(num)),
-                    _ => unimplemented!("Only int/float constants supported for LdcW"),
+                    // TODO (someday): LdcW can be reference to String, Class or Method
+                    _ => bail!("LdcW constants other than int/float unimplemented"),
                 })
             }
             JVMInstruction::Ldc2W(n) => {
@@ -289,7 +298,7 @@ impl Visitor {
                 out.push(match num {
                     NumericConstant::Long(num) => I(WASMInstruction::I64Const(num)),
                     NumericConstant::Double(num) => I(WASMInstruction::F64Const(num)),
-                    _ => unreachable!("Expected long/double constant for Ldc2W"),
+                    _ => unreachable!("Ldc2W expected long/double constant"),
                 })
             }
             JVMInstruction::Ldiv => out.push(I(WASMInstruction::I64DivS)),
@@ -304,7 +313,9 @@ impl Visitor {
                 out.push(I(WASMInstruction::I64Const(-1)));
                 out.push(I(WASMInstruction::I64Mul));
             }
-            JVMInstruction::Lookupswitch { .. } => unimplemented!("Lookupswitch (n-Way Branch)"),
+            JVMInstruction::Lookupswitch { .. } => {
+                bail!("Lookupswitch instruction unimplemented (n-Way Branch)")
+            }
             JVMInstruction::Lor => out.push(I(WASMInstruction::I64Or)),
             JVMInstruction::Lrem => out.push(I(WASMInstruction::I64RemS)),
             JVMInstruction::Lreturn => out.push(I(WASMInstruction::Return)),
@@ -319,14 +330,18 @@ impl Visitor {
             JVMInstruction::Lsub => out.push(I(WASMInstruction::I64Sub)),
             JVMInstruction::Lushr => out.push(I(WASMInstruction::I64ShrU)),
             JVMInstruction::Lxor => out.push(I(WASMInstruction::I64Xor)),
-            JVMInstruction::Monitorenter => unimplemented!("Monitorenter (Monitor)"),
-            JVMInstruction::Monitorexit => unimplemented!("Monitorexit (Monitor)"),
-            JVMInstruction::Multianewarray { .. } => unimplemented!("Multianewarray (Array)"),
+            JVMInstruction::Monitorenter => {
+                bail!("Monitorenter instruction unimplemented (Monitor)")
+            }
+            JVMInstruction::Monitorexit => bail!("Monitorexit instruction unimplemented (Monitor)"),
+            JVMInstruction::Multianewarray { .. } => {
+                bail!("Multianewarray instruction unimplemented (Array)")
+            }
             JVMInstruction::New(n) => {
                 let class_name = const_pool.class_name(*n);
                 out.push(Instruction::New(class_name));
             }
-            JVMInstruction::Newarray(_) => unimplemented!("Newarray (Array)"),
+            JVMInstruction::Newarray(_) => bail!("Newarray instruction unimplemented (Array)"),
             JVMInstruction::Nop => out.push(I(WASMInstruction::Nop)),
             JVMInstruction::Pop => out.push(I(WASMInstruction::Drop)),
             JVMInstruction::Pop2 => out.push(I(WASMInstruction::Drop)),
@@ -334,23 +349,32 @@ impl Visitor {
                 let id = const_pool.field(*n);
                 out.push(Instruction::PutField(id));
             }
-            JVMInstruction::Putstatic(_) => unimplemented!("Putstatic (Static Field)"),
-            JVMInstruction::Ret(_) => unimplemented!("Ret (Irreducible)"),
-            JVMInstruction::RetWide(_) => unimplemented!("RetWide (Irreducible)"),
+            JVMInstruction::Putstatic(_) => {
+                bail!("Putstatic instruction unimplemented (Static Field)")
+            }
+            JVMInstruction::Ret(_) => bail!("Ret instruction unimplemented (Irreducible)"),
+            JVMInstruction::RetWide(_) => bail!("RetWide instruction unimplemented (Irreducible)"),
             JVMInstruction::Return => out.push(I(WASMInstruction::Return)),
-            JVMInstruction::Saload => unimplemented!("Saload (Array)"),
-            JVMInstruction::Sastore => unimplemented!("Sastore (Array)"),
+            JVMInstruction::Saload => bail!("Saload instruction unimplemented (Array)"),
+            JVMInstruction::Sastore => bail!("Sastore instruction unimplemented (Array)"),
             JVMInstruction::Sipush(n) => out.push(I(WASMInstruction::I32Const(*n as i32))),
-            JVMInstruction::Swap => unimplemented!("Swap (Stack Type)"),
-            JVMInstruction::Tableswitch { .. } => unimplemented!("Tableswitch (n-Way Branch)"),
+            JVMInstruction::Swap => bail!("Swap instruction unimplemented (Stack Type)"),
+            JVMInstruction::Tableswitch { .. } => {
+                bail!("Tableswitch instruction unimplemented (n-Way Branch)")
+            }
         };
+        Ok(())
     }
 
-    fn visit_struct(&self, out: &mut Vec<Instruction<'_>>, structure: &Structure) {
+    fn visit_struct(
+        &self,
+        out: &mut Vec<Instruction<'_>>,
+        structure: &Structure,
+    ) -> anyhow::Result<()> {
         match structure {
             Structure::Block(instructions) => {
                 for instruction in instructions {
-                    self.visit(out, instruction);
+                    self.visit(out, instruction)?;
                 }
             }
             Structure::CompoundConditional {
@@ -359,13 +383,13 @@ impl Visitor {
                 left,
                 right,
             } => {
-                self.visit_struct(out, &left);
+                self.visit_struct(out, &left)?;
                 out.push(I(WASMInstruction::If(BlockType::Result(ValType::I32))));
                 match (left_negated, kind) {
                     // if left && right
                     (false, ConditionalKind::Conjunction) => {
                         // if condition is TRUE, left is TRUE, check right too
-                        self.visit_struct(out, right);
+                        self.visit_struct(out, right)?;
                         out.push(I(WASMInstruction::Else));
                         // else left is FALSE, conjunction must be FALSE, short-circuit
                         out.push(I(WASMInstruction::I32Const(0)));
@@ -376,7 +400,7 @@ impl Visitor {
                         out.push(I(WASMInstruction::I32Const(0)));
                         out.push(I(WASMInstruction::Else));
                         // else left is TRUE, check right too
-                        self.visit_struct(out, right);
+                        self.visit_struct(out, right)?;
                     }
                     // if left || right
                     (false, ConditionalKind::Disjunction) => {
@@ -384,12 +408,12 @@ impl Visitor {
                         out.push(I(WASMInstruction::I32Const(1)));
                         out.push(I(WASMInstruction::Else));
                         // else left is FALSE, check right too
-                        self.visit_struct(out, right);
+                        self.visit_struct(out, right)?;
                     }
                     // if !left || right
                     (true, ConditionalKind::Disjunction) => {
                         // if NEGATED condition is TRUE, !left is FALSE, check right too
-                        self.visit_struct(out, right);
+                        self.visit_struct(out, right)?;
                         out.push(I(WASMInstruction::Else));
                         // else left is TRUE, disjunction must be TRUE, short-circuit
                         out.push(I(WASMInstruction::I32Const(1)));
@@ -398,14 +422,19 @@ impl Visitor {
                 out.push(I(WASMInstruction::End));
             }
         }
+        Ok(())
     }
 
     #[inline]
-    fn visit_node(&self, out: &mut Vec<Instruction<'_>>, node: &Node<Structure>) {
-        self.visit_struct(out, &node.value);
+    fn visit_node(
+        &self,
+        out: &mut Vec<Instruction<'_>>,
+        node: &Node<Structure>,
+    ) -> anyhow::Result<()> {
+        self.visit_struct(out, &node.value)
     }
 
-    fn visit_loop(&self, out: &mut Vec<Instruction<'_>>, loop_info: Loop) {
+    fn visit_loop(&self, out: &mut Vec<Instruction<'_>>, loop_info: Loop) -> anyhow::Result<()> {
         // Allow easily breaking out of the loop...
         out.push(I(WASMInstruction::Block(BlockType::Empty)));
         // ...and continuing to the next iteration
@@ -418,7 +447,7 @@ impl Visitor {
                 assert_eq!(header.out_degree(), 2); // Header should be 2-way conditional
 
                 // If this is a pre-tested loop, the condition is in the header, so evaluate it
-                self.visit_node(out, header);
+                self.visit_node(out, header)?;
 
                 if loop_info.header == loop_info.latching
                     && header.successors[1 /* true */] == loop_info.header
@@ -438,7 +467,7 @@ impl Visitor {
                     out.push(I(WASMInstruction::BrIf(1)));
 
                     // Run the loop body (not the follow node), until we return to the header
-                    self.visit_until(out, body, Some(loop_info.header), false);
+                    self.visit_until(out, body, Some(loop_info.header), false)?;
 
                     // ...then branch back to the start of the loop
                     out.push(I(WASMInstruction::Br(0)));
@@ -451,9 +480,9 @@ impl Visitor {
                 // If this is a post-tested loop, the condition is in the latching node, so visit
                 // all nodes up to it, making sure not to treat the first node as a loop (`true`)
                 // as that would look to infinite recursion
-                self.visit_until(out, loop_info.header, Some(loop_info.latching), true);
+                self.visit_until(out, loop_info.header, Some(loop_info.latching), true)?;
                 // ...then evaluate the latching condition
-                self.visit_node(out, latching);
+                self.visit_node(out, latching)?;
 
                 // Follow should be false branch of latching conditional...
                 assert_eq!(latching.successors[0], loop_info.follow);
@@ -468,24 +497,33 @@ impl Visitor {
 
         out.push(I(WASMInstruction::End));
         out.push(I(WASMInstruction::End));
+
+        Ok(())
     }
 
-    fn visit_conditional(&self, out: &mut Vec<Instruction<'_>>, header: NodeId, follow: NodeId) {
+    fn visit_conditional(
+        &self,
+        out: &mut Vec<Instruction<'_>>,
+        header: NodeId,
+        follow: NodeId,
+    ) -> anyhow::Result<()> {
         let node = &self.code.g[header];
         assert_eq!(node.out_degree(), 2);
         let true_branch = node.successors[1];
         let false_branch = node.successors[0];
 
-        self.visit_node(out, node);
+        self.visit_node(out, node)?;
         out.push(I(WASMInstruction::If(BlockType::Empty)));
         {
-            self.visit_until(out, true_branch, Some(follow), false);
+            self.visit_until(out, true_branch, Some(follow), false)?;
         }
         out.push(I(WASMInstruction::Else));
         {
-            self.visit_until(out, false_branch, Some(follow), false);
+            self.visit_until(out, false_branch, Some(follow), false)?;
         }
         out.push(I(WASMInstruction::End));
+
+        Ok(())
     }
 
     fn visit_until(
@@ -494,14 +532,14 @@ impl Visitor {
         mut n: NodeId,
         until: Option<NodeId>,
         mut ignore_first_loop: bool,
-    ) {
+    ) -> anyhow::Result<()> {
         while Some(n) != until {
             // If this function is called when visiting the header of a post-tested loop,
-            // do not treat it as a loop, as that would look to infinite recursion
+            // do not treat it as a loop, as that would lead to infinite recursion
             if !ignore_first_loop {
                 if let Some(loop_info) = self.code.loops.get(n) {
                     // If n is a loop header node...
-                    self.visit_loop(out, *loop_info);
+                    self.visit_loop(out, *loop_info)?;
                     n = loop_info.follow;
                     continue;
                 }
@@ -510,25 +548,27 @@ impl Visitor {
 
             if let Some(&follow) = self.code.conditionals.get(n) {
                 // If n is a 2-way conditional header node...
-                self.visit_conditional(out, n, follow);
+                self.visit_conditional(out, n, follow)?;
                 n = follow;
             } else {
                 // Otherwise, it's a regular block
                 let node = &self.code.g[n];
                 assert!(node.out_degree() <= 1);
-                self.visit_node(out, node);
+                self.visit_node(out, node)?;
                 if node.out_degree() == 0 {
-                    break;
+                    break; // If this is an exit node, we're done
                 } else {
                     n = node.successors[0];
                 }
             }
         }
+        Ok(())
     }
 
-    pub fn visit_all(&self, out: &mut Vec<Instruction<'_>>) {
+    pub fn visit_all(&self, out: &mut Vec<Instruction<'_>>) -> anyhow::Result<()> {
         let start = self.code.g.entry.expect("visit_all needs entrypoint");
-        self.visit_until(out, start, None, false);
+        self.visit_until(out, start, None, false)?;
         out.push(I(WASMInstruction::End));
+        Ok(())
     }
 }

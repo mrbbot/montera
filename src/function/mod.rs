@@ -65,7 +65,7 @@ impl CompileFunctionJob {
                     locals: Arc::clone(&locals),
                     code: structure,
                 };
-                visitor.visit_all(&mut out);
+                visitor.visit_all(&mut out)?;
 
                 // TODO: instrument shadow stack here
 
