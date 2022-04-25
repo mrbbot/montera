@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -18,7 +18,7 @@ jobs:
         with:
           distribution: "adopt"
           java-version: "11"
-      - uses: ts-graphviz/setup-graphviz@v1  # `graphviz` is required by tests
+      - uses: ts-graphviz/setup-graphviz@v1  # `dot` is required by tests
       - name: Build
         run: cargo build --verbose
       - name: Test
