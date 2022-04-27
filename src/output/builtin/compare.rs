@@ -1,14 +1,22 @@
 use crate::class::FunctionType;
 use wasm_encoder::{BlockType, Function as WASMFunction, Instruction as WASMInstruction, ValType};
 
+/// Set of instructions to use for comparing two numbers of [`ValType`].
 struct CompareInstructions<'a> {
+    /// Instruction to evaluate `a > b`, pushing `1` if true, and `0` otherwise.
     gt: WASMInstruction<'a>,
+    /// Instruction to evaluate `a = b`, pushing `1` if true, and `0` otherwise.
     eq: WASMInstruction<'a>,
+    /// Instruction to evaluate `a < b`, pushing `1` if true, and `0` otherwise.
     lt: WASMInstruction<'a>,
+    /// Whether this type permits `NaN` values. If so, the generated function will include an extra
+    /// parameter to determine what happens on `NaN` values. Note all above instructions should
+    /// return `0` if either `a` or `b` is `NaN`.
     has_nan: bool,
 }
 
 impl CompareInstructions<'_> {
+    /// Returns the set of instructions to use for comparing two numbers of the same type `t`.
     fn from_type(t: ValType) -> Self {
         match t {
             ValType::I64 => CompareInstructions {
@@ -34,6 +42,18 @@ impl CompareInstructions<'_> {
     }
 }
 
+/// Constructs a function (type and body) for comparing two numbers of the same type `t`.
+///
+/// Multiple instances of this function may be included in a module, for each of the value types
+/// `i64`, `f32` and `f64`.
+///
+/// For `i64`, this function has the signature `[a: i64, b: i64] -> [ord: i32]`,
+/// returning 1 if a > b, 0 if a = b, and -1 otherwise.
+///
+/// For `f32`/`f64`, this function has the signature `[a: t, b: t, nan_greater: i32] -> [ord: i32]`,
+/// returning 1 if a > b, 0 if a = b, and -1 if a < b. If either a or b is NaN, and `nan_greater` is
+/// 1, it returns 1, otherwise it returns -1. This allows the same function specialisation to be
+/// used for _CMPG and _CMPL instructions.
 pub fn construct_compare(t: ValType) -> (FunctionType, WASMFunction) {
     let cmp = CompareInstructions::from_type(t);
     let func_type = FunctionType {

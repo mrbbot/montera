@@ -2,6 +2,16 @@ use crate::class::FunctionType;
 use crate::virtuals::VIRTUAL_CLASS_ID_MEM_ARG;
 use wasm_encoder::{Function as WASMFunction, Instruction as WASMInstruction, ValType};
 
+/// Constructs a function (type and body) for allocating empty memory blocks for object instances
+/// on the heap. The function has the signature `[size: i32, virtual_class_id: i32] -> [ptr: i32]`.
+///
+/// This uses a bump allocator. The `mut i32` global variable at `heap_next_global_index` points
+/// to the next free address in hte heap. On allocation, the current value of this variable is
+/// returned (start of block) and incremented by the desired size of the block. This allocator
+/// is very fast, but no garbage collection is performed.
+///
+/// This function will also store the 4 byte `virtual_class_id` at the start of the block to
+/// identify the instance type.
 pub fn construct_allocate(heap_next_global_index: u32) -> (FunctionType, WASMFunction) {
     let func_type = FunctionType {
         params: vec![ValType::I32, ValType::I32], // [size: i32, virtual_class_id: i32]

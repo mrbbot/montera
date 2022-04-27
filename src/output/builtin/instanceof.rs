@@ -2,6 +2,17 @@ use crate::class::FunctionType;
 use crate::virtuals::VIRTUAL_CLASS_ID_MEM_ARG;
 use wasm_encoder::{BlockType, Function as WASMFunction, Instruction as WASMInstruction, ValType};
 
+/// Constructs a function (type and body) for checking if an object reference is an instance of a
+/// target class (or any subclass of the target). This function has the signature:
+/// `[ptr: i32, target_virtual_class_id: i32] -> [is: i32]`, returning `1` if `ptr` is an instance
+/// of `target_virtual_class_id` and `0` otherwise.
+///
+/// This function will check the associated virtual class ID (or any of its superclasses) of the
+/// object reference matches `target_virtual_class_id`. To get superclasses, constant super ID
+/// functions (with type `[] -> [i32]` or `super_id_type_index`) at virtual class ID indices in the
+/// virtual table will be called. See [`crate::virtuals::VirtualTable`] for more details.
+///
+/// When virtual class ID `0` (`java/lang/Object`) is reached, this function terminates with `0`.
 pub fn construct_instanceof(super_id_type_index: u32) -> (FunctionType, WASMFunction) {
     let func_type = FunctionType {
         params: vec![ValType::I32, ValType::I32], // [ptr: i32, target_virtual_class_id: i32]
