@@ -1,10 +1,42 @@
 use crate::class::{Class, MethodId, JAVA_LANG_OBJECT};
 use crate::graph::{Graph, NodeId};
 use crate::virtuals::{VirtualClass, VirtualClassIndex};
+use crate::VirtualTable;
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+impl VirtualTable {
+    /// Constructs the unified virtual method table. See [`VirtualTable`].
+    ///
+    /// To do this, we construct an inheritance tree with nodes for all classes in the program, and
+    /// edges connecting classes to their superclasses ([`construct_inheritance_tree`]). We then
+    /// traverse the tree, adding all defined methods, and assign an index to them
+    /// ([`populate_tree_methods`]). This gives a unique offset shared by all subclasses.
+    /// Iterating classes deterministically gives a single virtual method table ([`index_tree`]).
+    pub fn from_classes(classes: &Arc<HashMap<Arc<String>, Class>>) -> Self {
+        // Construct inheritance tree
+        let mut inheritance_tree = construct_inheritance_tree(classes);
+
+        // Add all possible methods that could be called on a class to the tree
+        let root = inheritance_tree.entry.unwrap();
+        populate_tree_methods(classes, &mut inheritance_tree, root, vec![]);
+
+        // Build the class_indices map with entries mapping class names to IDs in the graph and
+        // virtual class IDs into the final WebAssembly table
+        let class_indices = index_tree(&inheritance_tree);
+
+        Self {
+            classes: Arc::clone(classes),
+            inheritance_tree,
+            class_indices,
+        }
+    }
+}
+
+/// Constructs an inheritance tree with nodes for all classes in the program, and edges connecting
+/// classes to their superclasses. The root of this tree is `java/lang/Object`: the shared base
+/// class for all classes in Java.
 pub fn construct_inheritance_tree(classes: &HashMap<Arc<String>, Class>) -> Graph<VirtualClass> {
     // Create nodes for all classes, including shared base class Object
     let mut g = Graph::new();
@@ -30,6 +62,12 @@ pub fn construct_inheritance_tree(classes: &HashMap<Arc<String>, Class>) -> Grap
     g
 }
 
+/// Add a list of methods callable on instances of each class and the class that providing the
+/// implementation.
+///
+/// To build this, we copy all methods from the superclass, checking if the current class overrides
+/// them. We then add all new methods defined in that class. Methods declared abstract have no
+/// implementation but are still included.
 pub fn populate_tree_methods(
     classes: &HashMap<Arc<String>, Class>,
     g: &mut Graph<VirtualClass>,
@@ -72,6 +110,10 @@ pub fn populate_tree_methods(
     g[current_id].value.methods = current_methods;
 }
 
+/// Assign a unique virtual class ID to each class.
+///
+/// Because classes are added to the tree in lexicographic order, virtual class IDs will be
+/// alphabetic, with `java/lang/Object` always having ID 0.
 pub fn index_tree(g: &Graph<VirtualClass>) -> HashMap<Arc<String>, VirtualClassIndex> {
     let mut class_indices = HashMap::new();
 

@@ -9,6 +9,10 @@ use wasm_encoder::{
 };
 
 impl VirtualTable {
+    /// Renders the virtual method table to the output WebAssembly module.
+    ///
+    /// Constant Super ID functions returning the virtual class ID of superclasses will be rendered
+    /// to the module too. Each table element will be an index to a function in the module.
     pub fn render(&self, out: &mut Module, function_indices: &HashMap<MethodId, u32>) {
         // Get type of super ID functions: [] -> [super_vid: i32]
         let super_id_func_type = Arc::new(FunctionType {
