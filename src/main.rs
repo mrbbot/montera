@@ -35,6 +35,8 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::{fs, panic};
 
+/// Queues jobs to load and parse all classes at `input_paths`, returning a channel to receive
+/// parsed [`Class`]es on. See [`LoadClassJob`] for more details.
 fn load_classes(
     schd: &impl Scheduler,
     input_paths: Vec<PathBuf>,
@@ -51,6 +53,7 @@ fn load_classes(
     class_rx
 }
 
+/// Creates a directory (and all parents) for a function's intermediate graphs.
 fn create_graphs_dir(
     graphs_root_dir: Option<&PathBuf>,
     function: &Function,
@@ -64,6 +67,10 @@ fn create_graphs_dir(
     Ok(graphs_dir)
 }
 
+/// Queues jobs to compile all functions of [`Class`]es, returning all parsed classes, the total
+/// number of functions, and a channel to receive [`CompiledFunction`]s on. If `graphs_root_dir`
+/// is specified, intermediate structuring graphs will be rendered. See [`CompileFunctionJob`] for
+/// more details.
 fn compile_functions<'a>(
     schd: &impl Scheduler,
     graphs_root_dir: Option<&PathBuf>,
@@ -110,6 +117,8 @@ fn compile_functions<'a>(
     Ok((classes, function_count, function_rx))
 }
 
+/// Constructs a reference-counted virtual method table from a set of parsed classes. If
+/// `graphs_root_dir` is specified, the virtual table's inheritance tree will be rendered.
 fn construct_virtual_table(
     graphs_root_dir: Option<&PathBuf>,
     classes: &Arc<HashMap<Arc<String>, Class>>,
@@ -124,6 +133,7 @@ fn construct_virtual_table(
     Ok(virtual_table)
 }
 
+/// Waits for the results of all function compilations, storing them in a single `Vec`.
 fn collect_functions(
     function_count: usize,
     function_rx: Receiver<anyhow::Result<CompiledFunction>>,
@@ -136,6 +146,8 @@ fn collect_functions(
     Ok(functions)
 }
 
+/// Performs the rendering phase of WebAssembly generation, lowering all pseudo-instructions to real
+/// WebAssembly instructions using program wide information. See [`Renderer`] for more details.
 fn render_module(
     classes: Arc<HashMap<Arc<String>, Class>>,
     virtual_table: Rc<VirtualTable>,
@@ -154,6 +166,7 @@ fn render_module(
     module
 }
 
+/// Writes a WebAssembly module's bytes to disk, in both the binary `.wasm` and text `.wat` formats.
 fn write_module(
     output_path: &PathBuf,
     wasm: &[u8],
@@ -166,6 +179,7 @@ fn write_module(
     Ok(())
 }
 
+/// Optimises a binary WebAssembly module using [Binaryen](https://github.com/WebAssembly/binaryen).
 fn optimise_module(wasm: &[u8]) -> anyhow::Result<Vec<u8>> {
     info!("Optimising WebAssembly module...");
     // Optimise module using Binaryen, note this doesn't tell us what went wrong yet, see:
@@ -180,8 +194,11 @@ fn optimise_module(wasm: &[u8]) -> anyhow::Result<Vec<u8>> {
     Ok(binaryen_module.write())
 }
 
+/// Main entrypoint for the command line interface. Compiles `.class` files to WebAssembly.
 fn main() -> anyhow::Result<()> {
+    // Get the current time for logging the total execution time at the end
     let start = Instant::now();
+    // Parse command line arguments
     let opts = Options::parse();
 
     // Immediately terminate the program if any thread panics

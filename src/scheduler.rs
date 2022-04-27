@@ -3,15 +3,21 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 
-// Job's must also implement Send so they can be sent between worker threads safely
+/// Job that can be scheduled using a [`Scheduler`]. `Job`'s must also implement `Send` so they can be
+/// sent between worker threads safely. Results should be returned using channels.
 pub trait Job: Send {
     fn process(&self);
 }
 
+/// Job scheduler.
 pub trait Scheduler {
-    fn schedule(&self, job: Box<dyn Job>); // Dynamic dispatch
+    fn schedule(&self, job: Box<dyn Job>); // `dyn` is dynamic dispatch
 }
 
+/// Schedules jobs across worker threads, executing jobs in parallel.
+///
+/// Uses a MPSC channel to send jobs to workers. Access to the receiving side is mediated using a
+/// mutual-exclusion lock.
 #[cfg(feature = "parallel_scheduler")]
 pub struct WorkerScheduler {
     sender: Sender<Box<dyn Job>>,
@@ -21,6 +27,7 @@ pub struct WorkerScheduler {
 
 #[cfg(feature = "parallel_scheduler")]
 impl WorkerScheduler {
+    /// Constructs a new scheduler using `workers` worker threads.
     pub fn new(workers: usize) -> Self {
         // Create a multi-producer single-consumer channel with an *infinite* buffer,
         // we're basically turning this into a single-producer multi-consumer channel
@@ -43,6 +50,7 @@ impl WorkerScheduler {
         schd
     }
 
+    /// Creates a new worker thread. This will be called `workers` times by [`WorkerScheduler::new`].
     fn spawn_worker(&mut self) {
         // Create a copy of the queue for this thread
         let thread_receiver = Arc::clone(&self.receiver);
@@ -69,10 +77,12 @@ impl WorkerScheduler {
 
 impl Scheduler for WorkerScheduler {
     fn schedule(&self, job: Box<dyn Job>) {
+        // Send the job on the channel to any receiving worker thread
         self.sender.send(job).unwrap();
     }
 }
 
+/// Schedules jobs immediately on the current thread, executing jobs in serial.
 #[cfg(not(feature = "parallel_scheduler"))]
 pub struct SerialScheduler;
 
