@@ -13,14 +13,26 @@ use wasm_encoder::{
     EntityType, Export, Function as WASMFunction, Instruction as WASMInstruction, MemArg, ValType,
 };
 
+/// WebAssembly generation rendering phase operating on the whole program.
+/// Performed on the main thread once all functions have been compiled by
+/// [`crate::function::CompileFunctionJob`].
+///
+/// The rendering phase takes structured functions, a virtual table, and produces an executable
+/// WebAssembly [`Module`] for optimisation and writing. This requires lowering pseudo-instructions
+/// to real WebAssembly instructions using program-wide information. Appropriate built-in functions
+/// and virtual dispatcher functions will be included in the final module.
 pub struct Renderer {
     classes: Arc<HashMap<Arc<String>, Class>>,
     virtual_table: Rc<VirtualTable>,
     functions: Vec<CompiledFunction>,
+    /// Maps user-defined methods to their function index in the final module. Populated by
+    /// [`Renderer::index_functions`].
     function_indices: HashMap<MethodId, u32>,
 }
 
 impl Renderer {
+    /// Constructs a new renderer, with an empty mapping between user-defined methods and their
+    /// function indices in the final module.
     pub fn new(
         classes: Arc<HashMap<Arc<String>, Class>>,
         virtual_table: Rc<VirtualTable>,
@@ -34,6 +46,10 @@ impl Renderer {
         }
     }
 
+    /// Assign an index to each user-defined function, placing imports first as required by WASM.
+    ///
+    /// This must be called before [`Renderer::render`], as the index of a function must be known
+    /// to `call` it.
     fn index_functions(&mut self, out: &mut Module) {
         // Sort functions alphabetically, with imports first as required by WebAssembly
         self.functions.sort_by(|a, b| {
@@ -62,13 +78,18 @@ impl Renderer {
         }
     }
 
+    /// Renders a WebAssembly import (external method) to the module.
     fn render_import(&self, out: &mut Module, func: CompiledFunction) {
         let name = format!("{}", func.id);
+        // Get the index corresponding to this import's function type
         let type_index = out.ensure_type(&func.descriptor.function_type);
+        // Write the named import to the module with the required type
         let import_type = EntityType::Function(type_index);
         out.imports.import("imports", Some(&name), import_type);
     }
 
+    /// Computes the total size of the named class's fields, including subclasses' and the virtual
+    /// class ID.
     fn get_class_size<'a>(&'a self, mut class_name: &'a Arc<String>) -> i32 {
         let mut size = VIRTUAL_CLASS_ID_SIZE; // First 4 bytes for virtual class ID
         while class_name.as_str() != JAVA_LANG_OBJECT {
@@ -79,6 +100,7 @@ impl Renderer {
         i32::try_from(size).expect("Class size exceeded i32 bounds")
     }
 
+    /// Returns the WebAssembly type, memory offset and alignment immediates for a class field.
     fn get_field_offset(&self, id: &FieldId) -> (ValType, MemArg) {
         // Find field in inheritance tree, starting with ID's class_name. Normally, the class_name
         // is the calling class, not the superclass the field was defined in. However, if a field has
@@ -122,6 +144,13 @@ impl Renderer {
         (field_type, arg)
     }
 
+    /// Renders a (pseudo-)instruction to a WebAssembly function body.
+    ///
+    /// Pseudo-instructions will likely require built-in or virtual dispatcher functions. The
+    /// `Dup` instruction requires a temporary "scratch" local to duplicate from. This must be
+    /// defined if `Dup` is used. See [`Instruction`] for more details on pseudo-instructions.
+    ///
+    /// Note [`Renderer::index_functions`] must be called before this function.
     fn render(
         &self,
         out: &mut Module,
@@ -130,13 +159,16 @@ impl Renderer {
         scratch_local: Option<u32>,
     ) {
         match instruction {
+            // Simple WebAssembly instruction, add to function directly
             Instruction::I(instruction) => f.instruction(&instruction),
+            // Duplicates the value at the top of the stack
             Instruction::Dup => {
                 let scratch_local = scratch_local.unwrap();
                 // LocalTee is equivalent to LocalSet followed by LocalGet
                 f.instruction(&WASMInstruction::LocalTee(scratch_local))
                     .instruction(&WASMInstruction::LocalGet(scratch_local))
             }
+            //  Creates a new instance of the specified class on the heap returning a reference
             Instruction::New(class_name) => {
                 if *class_name == "java/lang/AssertionError" {
                     // The Java standard library is not supported, but basic support is required
@@ -153,12 +185,14 @@ impl Renderer {
                         .instruction(&WASMInstruction::Call(allocate_index))
                 }
             }
+            // Checks if the reference is an `instanceof` the specified class
             Instruction::InstanceOf(class_name) => {
                 let virtual_class_id = self.virtual_table.get_virtual_class_id(&class_name);
                 let instanceof_index = out.ensure_builtin_function(BuiltinFunction::InstanceOf);
                 f.instruction(&WASMInstruction::I32Const(virtual_class_id))
                     .instruction(&WASMInstruction::Call(instanceof_index))
             }
+            // Gets the value of the specified field of the object reference on the top of the stack
             Instruction::GetField(id) => {
                 let (field_type, arg) = self.get_field_offset(&id);
                 f.instruction(&match field_type {
@@ -169,6 +203,8 @@ impl Renderer {
                     _ => unimplemented!("{:?}", field_type),
                 })
             }
+            // Puts the value into the specified field of the object reference on the top of the
+            // stack
             Instruction::PutField(id) => {
                 let (field_type, arg) = self.get_field_offset(&id);
                 f.instruction(&match field_type {
@@ -179,6 +215,8 @@ impl Renderer {
                     _ => unimplemented!("{:?}", field_type),
                 })
             }
+            // Calls the specified static method (no dynamic dispatch), popping the required number
+            // of parameters off the stack and pushing back the result
             Instruction::CallStatic(id) => {
                 if *id.class_name == "java/lang/AssertionError" && id.name.as_str() == "<init>" {
                     // The Java standard library is not supported, but basic support is required
@@ -192,22 +230,33 @@ impl Renderer {
                     f.instruction(&WASMInstruction::Call(index))
                 }
             }
+            // Calls the specified instance method (using dynamic dispatch), popping the required
+            // number of parameters off the stack (including an implicit `this` reference) and
+            // pushing back the result
             Instruction::CallVirtual(id) => {
                 let virtual_offset = self.virtual_table.get_method_virtual_offset(&id);
                 let dispatcher_index = out.ensure_dispatcher_function(&id.descriptor.function_type);
                 f.instruction(&WASMInstruction::I32Const(virtual_offset))
                     .instruction(&WASMInstruction::Call(dispatcher_index))
             }
+            // Pops two `long` values `a` and `b` off the top of the stack, returning -1 if `a < b`,
+            // 0 if `a = b` and 1 if `a > b`
             Instruction::LongCmp => {
                 let long_cmp_index = out.ensure_builtin_function(BuiltinFunction::LongCmp);
                 f.instruction(&WASMInstruction::Call(long_cmp_index))
             }
+            // Pops two `float` values `a` and `b` off the top of the stack, returning -1 if `a < b`,
+            // 0 if `a = b` and 1 if `a > b`. If either `a` or `b` is NaN, the result is determined
+            // by the specified `NaNBehaviour`
             Instruction::FloatCmp(nan_behaviour) => {
                 let float_cmp_index = out.ensure_builtin_function(BuiltinFunction::FloatCmp);
                 let nan_greater = nan_behaviour.as_nan_greater_int();
                 f.instruction(&WASMInstruction::I32Const(nan_greater))
                     .instruction(&WASMInstruction::Call(float_cmp_index))
             }
+            // Pops two `double` values `a` and `b` off the top of the stack, returning -1 if `a < b`,
+            // 0 if `a = b` and 1 if `a > b`. If either `a` or `b` is NaN, the result is determined
+            // by the specified `NaNBehaviour`
             Instruction::DoubleCmp(nan_behaviour) => {
                 let double_cmp_index = out.ensure_builtin_function(BuiltinFunction::DoubleCmp);
                 let nan_greater = nan_behaviour.as_nan_greater_int();
@@ -217,6 +266,13 @@ impl Renderer {
         };
     }
 
+    /// Renders a WebAssembly function (with code) to the module. If the function is `public static`,
+    /// it will be exported to the host.
+    ///
+    /// Each (pseudo-) instruction will be lowered to a real WebAssembly instruction by
+    /// [`Renderer::render`].
+    ///
+    /// Note [`Renderer::index_functions`] must be called before this function.
     fn render_function(&self, out: &mut Module, func: CompiledFunction) {
         let is_static = func.is_static();
         let is_export = func.is_export();
@@ -257,6 +313,7 @@ impl Renderer {
         }
     }
 
+    /// Renders all user-defined functions (including native imports) to the WebAssembly functions.
     pub fn render_all(mut self, out: &mut Module) -> HashMap<MethodId, u32> {
         // Sort and assign indices to functions
         self.index_functions(out);

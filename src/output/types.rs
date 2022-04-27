@@ -6,21 +6,52 @@ use wasm_encoder::{
     NameSection, TableSection, TypeSection,
 };
 
+/// Function that another function wants to **ensure** exists once in the output module.
+/// This represents a function dependency.
 pub(super) struct EnsuredFunction {
+    /// Index of the WebAssembly function type in the output module.
     pub type_index: u32,
+    /// Index of the WebAssembly function body in the output module.
     pub function_index: u32,
+    /// WebAssembly function body.
     pub function: WASMFunction,
+    /// Debug name of this function. Should start with an `!` indicating a system-defined function.
     pub name: String,
 }
 
+/// Output WebAssembly module including types, functions, memory and tables.
+///
+/// This has the following structure:
+///
+/// - Function Type Declarations (Type Section)
+/// - User Imports (Import Section)
+/// - User Functions (Function Section)
+/// - Built-in/Dispatcher Functions (Function Section)
+/// - Super Virtual ID Functions (Function Section)
+/// - Table Declaration (Table Section)
+/// - Memory Declaration (Memory Section)
+/// - Virtual Table Elements (Element Section)
+/// - Function Code (Code Section)
+/// - Debug Function Names (Name Section)
+///
+/// When rendering user functions, we don't know what built-ins/dispatchers future functions will
+/// require. We also need known indices for each user function so future functions can be called.
+/// This means built-ins/dispatchers must come after user functions.
 pub struct Module {
+    /// Dependencies of user-functions already added to the module. This maps values are either
+    /// type indices (for [`Ensurable::Type`]) or function indices (for [`Ensurable::Dispatcher`] or
+    /// [`Ensurable::Builtin`]).
     pub(super) ensured: HashMap<Ensurable, u32>,
+    /// Index in the module of the next added ensured function type.
     pub(super) next_type_index: u32,
+    /// Index in the module of the next added function.
     pub next_function_index: u32,
+    /// Index in the module of the next added global variable.
     pub(super) next_global_index: u32,
-    // Instead of directly writing ensured functions to the function/code sections, delay writing
-    // them until all user functions have been written so we can predict their IDs for calls
+    /// Instead of directly writing ensured functions to the function/code sections, delay writing
+    /// them until all user functions have been written so we can predict their IDs for calls.
     pub(super) ensured_functions: Vec<EnsuredFunction>,
+    /// Debug names for each function, used in WebAssembly text output.
     pub function_names: NameMap,
 
     // https://webassembly.github.io/spec/core/binary/modules.html#sections
@@ -36,6 +67,7 @@ pub struct Module {
 }
 
 impl Module {
+    /// Constructs a new empty module, with an empty heap memory.
     pub fn new() -> Self {
         let mut module = Self {
             ensured: HashMap::new(),
@@ -59,8 +91,8 @@ impl Module {
         module
     }
 
+    /// Adds and exports a memory for the heap to this module.
     fn add_heap(&mut self) {
-        // Create and export memory for heap
         self.memories.memory(MemoryType {
             minimum: 1,
             maximum: None,
@@ -69,6 +101,8 @@ impl Module {
         self.exports.export("memory", Export::Memory(0));
     }
 
+    /// Finalises this module and converts it to *unoptimised* executable bytes.
+    /// This result can be written directly to a binary `.wasm` file.
     pub fn finish(self) -> Vec<u8> {
         // Build names section
         let mut names = NameSection::new();

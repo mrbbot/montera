@@ -12,13 +12,23 @@ use wasm_encoder::{
     Function as WASMFunction, GlobalType, Instruction as WASMInstruction, TypeSection, ValType,
 };
 
+/// Possible types or functions other functions want to *ensure* exist once in the output module.
+/// These represent functions' dependencies.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Ensurable {
+    /// WebAssembly type index corresponding to a [`FunctionType`].
     Type(Arc<FunctionType>),
+    /// WebAssembly function index corresponding to the virtual dispatcher function for
+    /// [`FunctionType`]. Note this function type key *omits* the implicit `this` parameter.
+    /// See [`crate::virtuals::VirtualTable`] for details on dispatchers.
     Dispatcher(Arc<FunctionType>),
+    /// WebAssembly function index corresponding to a built-in function for high-level JVM
+    /// instructions that are not supported by WebAssembly. See [`BuiltinFunction`] for details.
     Builtin(BuiltinFunction),
 }
 
+/// Ensures a function type is included in a WebAssembly module, adding it if it isn't, and
+/// returning the new or existing type index either way.
 fn ensure_type(
     ensured: &mut HashMap<Ensurable, u32>,
     next_type_index: &mut u32,
@@ -42,6 +52,14 @@ fn ensure_type(
 }
 
 impl Module {
+    /// Renders all ensured function bodies to the WebAssembly module.
+    ///
+    /// This should be called after user functions have been rendered. When rendering user
+    /// functions, we don't know what built-ins/dispatchers future functions will require. We also
+    /// need known indices for each user function so future functions can be called. This means
+    /// built-ins/dispatchers must come after user functions, but we still need to record which
+    /// ones are required and their index (for `call` instructions in user functions), before
+    /// rendering them in this function.
     pub(super) fn render_ensured_functions_queue(&mut self) {
         let Module {
             functions,
@@ -56,6 +74,8 @@ impl Module {
         }
     }
 
+    /// Ensures a function type is included in a WebAssembly module, adding it if it isn't, and
+    /// returning the new or existing type index either way.
     pub fn ensure_type(&mut self, func_type: &Arc<FunctionType>) -> u32 {
         let Module {
             ensured,
@@ -66,6 +86,10 @@ impl Module {
         ensure_type(ensured, next_type_index, types, func_type)
     }
 
+    /// Ensures a virtual dispatcher function is included in a WebAssembly module, adding it if it
+    /// isn't, and returning the new or existing function index either way. Note that
+    /// [`Module::render_ensured_functions_queue`] must be called to actually render the function to
+    /// the module. See [`crate::virtuals::VirtualTable`] for details on dispatchers.
     pub(super) fn ensure_dispatcher_function(&mut self, func_type: &Arc<FunctionType>) -> u32 {
         let Module {
             ensured,
@@ -139,6 +163,10 @@ impl Module {
         }
     }
 
+    /// Ensures a built-in function is included in a WebAssembly module, adding it if it
+    /// isn't, and returning the new or existing function index either way. Note that
+    /// [`Module::render_ensured_functions_queue`] must be called to actually render the function to
+    /// the module. See [`BuiltinFunction`] for details.
     pub(super) fn ensure_builtin_function(&mut self, builtin: BuiltinFunction) -> u32 {
         let Module {
             ensured,
