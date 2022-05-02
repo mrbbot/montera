@@ -67,3 +67,97 @@ pub fn construct_instanceof(super_id_type_index: u32) -> (FunctionType, WASMFunc
 
     (func_type, f)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::class::FunctionType;
+    use crate::output::builtin::BuiltinFunction;
+    use crate::tests::{construct_builtin_module, WASM_ENGINE};
+    use std::sync::Arc;
+    use wasm_encoder::{
+        Elements, Function as WASMFunction, Instruction as WASMInstruction, TableType, ValType,
+    };
+    use wasmtime::{Linker, Module, Store};
+
+    fn render_super_id_function(out: &mut crate::Module, type_index: u32, super_id: i32) -> u32 {
+        let mut f = WASMFunction::new(vec![]);
+        f.instruction(&WASMInstruction::I32Const(super_id))
+            .instruction(&WASMInstruction::End);
+        let super_id_index = out.next_function_index;
+        out.next_function_index += 1;
+        out.functions.function(type_index);
+        out.codes.function(&f);
+        super_id_index
+    }
+
+    #[test]
+    fn instanceof() -> anyhow::Result<()> {
+        let mut module = construct_builtin_module(&[BuiltinFunction::InstanceOf]);
+
+        // Insert a virtual method table corresponding to the following inheritance tree:
+        //    0
+        //   / \
+        //  1   4
+        //  |
+        //  2
+        //  |
+        //  3
+        //
+        // Get type of super ID functions: [] -> [super_vid: i32]
+        let super_id_func_type = Arc::new(FunctionType {
+            params: vec![],
+            results: vec![ValType::I32],
+        });
+        let super_id_type_index = module.ensure_type(&super_id_func_type);
+        // Render constant functions returning 0, 1 and 2
+        let super_id_0_index = render_super_id_function(&mut module, super_id_type_index, 0);
+        let super_id_1_index = render_super_id_function(&mut module, super_id_type_index, 1);
+        let super_id_2_index = render_super_id_function(&mut module, super_id_type_index, 2);
+        let super_ids = [
+            /* super(1) = 0 */ super_id_0_index,
+            /* super(2) = 1 */ super_id_1_index,
+            /* super(3) = 2 */ super_id_2_index,
+            /* super(4) = 0 */ super_id_0_index,
+        ];
+        module.elements.active(
+            None,
+            &WASMInstruction::I32Const(1),
+            ValType::FuncRef,
+            Elements::Functions(&super_ids),
+        );
+        module.tables.table(TableType {
+            element_type: ValType::FuncRef,
+            minimum: 5,
+            maximum: Some(5),
+        });
+
+        // Instantiate WebAssembly module
+        let module = Module::new(&WASM_ENGINE, module.finish())?;
+        let linker = Linker::new(&WASM_ENGINE);
+        let mut store = Store::new(&WASM_ENGINE, 0);
+        let instance = linker.instantiate(&mut store, &module)?;
+
+        // Get reference to exports
+        let instanceof =
+            instance.get_typed_func::<(i32, i32), i32, _>(&mut store, "!InstanceOf")?;
+        let memory = instance.get_memory(&mut store, "memory").unwrap();
+
+        // Create instance of class 2 in memory
+        let ptr = 4i32;
+        let vid = 2i32;
+        memory.write(&mut store, ptr as usize, &vid.to_le_bytes())?;
+
+        // Check class instanceof itself
+        assert_eq!(instanceof.call(&mut store, (ptr, vid))?, 1);
+        // Check class instanceof superclass
+        assert_eq!(instanceof.call(&mut store, (ptr, 1))?, 1);
+        // Check class instanceof java/lang/Object
+        assert_eq!(instanceof.call(&mut store, (ptr, 0))?, 1);
+        // Check class not instanceof subclass
+        assert_eq!(instanceof.call(&mut store, (ptr, 3))?, 0);
+        // Check class not instanceof of unrelated class
+        assert_eq!(instanceof.call(&mut store, (ptr, 4))?, 0);
+
+        Ok(())
+    }
+}

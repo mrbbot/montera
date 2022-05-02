@@ -2,7 +2,8 @@
 
 use crate::class::load_class;
 use crate::function::structure::ControlFlowGraph;
-use crate::Class;
+use crate::output::BuiltinFunction;
+use crate::{Class, Module};
 use data_encoding::HEXLOWER;
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
@@ -10,6 +11,8 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Mutex;
 use std::{env, fs};
+use wasm_encoder::Export;
+use wasmtime::Engine;
 
 const CACHE_DIR: &str = ".cache";
 
@@ -26,6 +29,10 @@ pub fn sha1_digest(data: &str) -> String {
 
 lazy_static! {
     static ref JAVAC_MUTEX: Mutex<()> = Mutex::new(());
+}
+
+lazy_static! {
+    pub static ref WASM_ENGINE: Engine = Engine::default();
 }
 
 /// Compiles, loads and parses Java code, returning a map of class names to parsed classes.
@@ -118,4 +125,19 @@ pub fn load_basic_blocks(code: &str) -> anyhow::Result<ControlFlowGraph> {
     let mut g = ControlFlowGraph::new();
     g.insert_basic_blocks(code);
     Ok(g)
+}
+
+/// Constructs a WebAssembly module exporting the specified built-in functions.
+pub fn construct_builtin_module(builtins: &[BuiltinFunction]) -> Module {
+    let mut module = Module::new();
+    for &builtin in builtins {
+        module.ensure_builtin_function(builtin);
+        // Previous function index should be ensured built-in
+        module.exports.export(
+            builtin.name(),
+            Export::Function(module.next_function_index - 1),
+        );
+    }
+    module.render_ensured_functions_queue();
+    module
 }

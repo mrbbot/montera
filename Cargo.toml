@@ -27,3 +27,4 @@ num_cpus = "1.13.1"
 sha1 = "0.10.1"
 wasm-encoder = "0.8.0"
 wasmprinter = "0.2.31"
+wasmtime = { version = "0.36.0", features = ["cranelift", "cache", "memory-init-cow", "wasm-backtrace"] }

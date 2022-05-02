@@ -60,7 +60,7 @@ impl Module {
     /// built-ins/dispatchers must come after user functions, but we still need to record which
     /// ones are required and their index (for `call` instructions in user functions), before
     /// rendering them in this function.
-    pub(super) fn render_ensured_functions_queue(&mut self) {
+    pub fn render_ensured_functions_queue(&mut self) {
         let Module {
             functions,
             codes,
@@ -90,7 +90,7 @@ impl Module {
     /// isn't, and returning the new or existing function index either way. Note that
     /// [`Module::render_ensured_functions_queue`] must be called to actually render the function to
     /// the module. See [`crate::virtuals::VirtualTable`] for details on dispatchers.
-    pub(super) fn ensure_dispatcher_function(&mut self, func_type: &Arc<FunctionType>) -> u32 {
+    pub fn ensure_dispatcher_function(&mut self, func_type: &Arc<FunctionType>) -> u32 {
         let Module {
             ensured,
             next_type_index,
@@ -167,7 +167,7 @@ impl Module {
     /// isn't, and returning the new or existing function index either way. Note that
     /// [`Module::render_ensured_functions_queue`] must be called to actually render the function to
     /// the module. See [`BuiltinFunction`] for details.
-    pub(super) fn ensure_builtin_function(&mut self, builtin: BuiltinFunction) -> u32 {
+    pub fn ensure_builtin_function(&mut self, builtin: BuiltinFunction) -> u32 {
         let Module {
             ensured,
             next_type_index,

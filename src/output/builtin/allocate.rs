@@ -33,3 +33,40 @@ pub fn construct_allocate(heap_next_global_index: u32) -> (FunctionType, WASMFun
         .instruction(&WASMInstruction::End);
     (func_type, f)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::output::builtin::BuiltinFunction;
+    use crate::tests::{construct_builtin_module, WASM_ENGINE};
+    use std::convert::TryInto;
+    use wasmtime::{Linker, Module, Store};
+
+    #[test]
+    fn allocate() -> anyhow::Result<()> {
+        // Instantiate WebAssembly module
+        let module = construct_builtin_module(&[BuiltinFunction::Allocate]);
+        let module = Module::new(&WASM_ENGINE, module.finish())?;
+        let linker = Linker::new(&WASM_ENGINE);
+        let mut store = Store::new(&WASM_ENGINE, 0);
+        let instance = linker.instantiate(&mut store, &module)?;
+
+        // Get references to exports
+        let allocate = instance.get_typed_func::<(i32, i32), i32, _>(&mut store, "!Allocate")?;
+        let memory = instance.get_memory(&mut store, "memory").unwrap();
+
+        // Check correct pointer returned
+        let p1 = allocate.call(&mut store, (/* size */ 16, /* virtual class ID */ 42))? as usize;
+        let p2 = allocate.call(&mut store, (/* size */ 10, /* virtual class ID */ 5000))? as usize;
+        assert_eq!(p1, 8);
+        assert_eq!(p2, 8 + 16);
+
+        // Check virtual class IDs stored
+        let data = memory.data_mut(&mut store);
+        let vid1 = i32::from_le_bytes(data[p1..p1 + 4].try_into().unwrap());
+        let vid2 = i32::from_le_bytes(data[p2..p2 + 4].try_into().unwrap());
+        assert_eq!(vid1, 42);
+        assert_eq!(vid2, 5000);
+
+        Ok(())
+    }
+}

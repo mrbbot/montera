@@ -122,3 +122,72 @@ pub fn construct_compare(t: ValType) -> (FunctionType, WASMFunction) {
 
     (func_type, f)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::output::builtin::BuiltinFunction;
+    use crate::tests::{construct_builtin_module, WASM_ENGINE};
+    use wasmtime::{Linker, Module, Store};
+
+    #[test]
+    fn compare() -> anyhow::Result<()> {
+        // Instantiate WebAssembly module
+        let module = construct_builtin_module(&[
+            BuiltinFunction::LongCmp,
+            BuiltinFunction::FloatCmp,
+            BuiltinFunction::DoubleCmp,
+        ]);
+        let module = Module::new(&WASM_ENGINE, module.finish())?;
+        let linker = Linker::new(&WASM_ENGINE);
+        let mut store = Store::new(&WASM_ENGINE, 0);
+        let instance = linker.instantiate(&mut store, &module)?;
+
+        // Get references to exports
+        let long_cmp = instance.get_typed_func::<(i64, i64), i32, _>(&mut store, "!LongCmp")?;
+        let float_cmp =
+            instance.get_typed_func::<(f32, f32, i32), i32, _>(&mut store, "!FloatCmp")?;
+        let double_cmp =
+            instance.get_typed_func::<(f64, f64, i32), i32, _>(&mut store, "!DoubleCmp")?;
+
+        // !LongCmp
+        assert_eq!(long_cmp.call(&mut store, (1, 2))?, -1);
+        assert_eq!(long_cmp.call(&mut store, (1, 1))?, 0);
+        assert_eq!(long_cmp.call(&mut store, (2, 1))?, 1);
+
+        // !FloatCmp
+        assert_eq!(float_cmp.call(&mut store, (1.0, 2.0, 0))?, -1);
+        assert_eq!(float_cmp.call(&mut store, (1.0, 1.0, 0))?, 0);
+        assert_eq!(float_cmp.call(&mut store, (2.0, 1.0, 0))?, 1);
+        // !FloatCmp: should ignore nan_greater parameters for non-NaN values
+        assert_eq!(float_cmp.call(&mut store, (1.0, 2.0, 1))?, -1);
+        assert_eq!(float_cmp.call(&mut store, (1.0, 1.0, 1))?, 0);
+        assert_eq!(float_cmp.call(&mut store, (2.0, 1.0, 1))?, 1);
+        // !FloatCmp: nan_greater = false
+        assert_eq!(float_cmp.call(&mut store, (f32::NAN, 1.0, 0))?, -1);
+        assert_eq!(float_cmp.call(&mut store, (1.0, f32::NAN, 0))?, -1);
+        assert_eq!(float_cmp.call(&mut store, (f32::NAN, f32::NAN, 0))?, -1);
+        // !FloatCmp: nan_greater = true
+        assert_eq!(float_cmp.call(&mut store, (f32::NAN, 1.0, 1))?, 1);
+        assert_eq!(float_cmp.call(&mut store, (1.0, f32::NAN, 1))?, 1);
+        assert_eq!(float_cmp.call(&mut store, (f32::NAN, f32::NAN, 1))?, 1);
+
+        // !DoubleCmp
+        assert_eq!(double_cmp.call(&mut store, (1.0, 2.0, 0))?, -1);
+        assert_eq!(double_cmp.call(&mut store, (1.0, 1.0, 0))?, 0);
+        assert_eq!(double_cmp.call(&mut store, (2.0, 1.0, 0))?, 1);
+        // !DoubleCmp: should ignore nan_greater parameters for non-NaN values
+        assert_eq!(double_cmp.call(&mut store, (1.0, 2.0, 1))?, -1);
+        assert_eq!(double_cmp.call(&mut store, (1.0, 1.0, 1))?, 0);
+        assert_eq!(double_cmp.call(&mut store, (2.0, 1.0, 1))?, 1);
+        // !DoubleCmp: nan_greater = false
+        assert_eq!(double_cmp.call(&mut store, (f64::NAN, 1.0, 0))?, -1);
+        assert_eq!(double_cmp.call(&mut store, (1.0, f64::NAN, 0))?, -1);
+        assert_eq!(double_cmp.call(&mut store, (f64::NAN, f64::NAN, 0))?, -1);
+        // !DoubleCmp: nan_greater = true
+        assert_eq!(double_cmp.call(&mut store, (f64::NAN, 1.0, 1))?, 1);
+        assert_eq!(double_cmp.call(&mut store, (1.0, f64::NAN, 1))?, 1);
+        assert_eq!(double_cmp.call(&mut store, (f64::NAN, f64::NAN, 1))?, 1);
+
+        Ok(())
+    }
+}
