@@ -129,3 +129,141 @@ pub fn index_tree(g: &Graph<VirtualClass>) -> HashMap<Arc<String>, VirtualClassI
 
     class_indices
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::class::{
+        FieldDescriptor, MethodDescriptor, MethodId, ReturnDescriptor, JAVA_LANG_OBJECT,
+    };
+    use crate::tests::{load_many_code, str_arc};
+    use crate::VirtualTable;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    #[allow(non_snake_case)]
+    #[test]
+    fn from_classes() -> anyhow::Result<()> {
+        // Construct virtual table from Java code
+        let classes = load_many_code(
+            "static abstract class Vehicle {
+                private int wheels;
+                public Vehicle(int wheels) { this.wheels = wheels; }
+                public int getWheels() { return this.wheels; }
+                abstract double getSpeed();
+                public double travelTime(double distance) { return distance / this.getSpeed(); }
+            }
+            
+            static class Bicycle extends Vehicle {
+                private double frameSize;
+                public Bicycle() { super(2); }
+                public double getSpeed() { return 10.0; }
+                public double getFrameSize() { return this.frameSize; }
+            }
+
+            static class Car extends Vehicle {
+                public Car() { super(4); }
+                public double getSpeed() { return 60.0; }
+                public boolean isElectric() { return true; }
+            }
+
+            static class Van extends Car {
+                public double getSpeed() { return 40.0; }
+            }",
+        )?;
+        let classes = classes
+            .into_iter()
+            .filter(|(k, _v)| k != "Test")
+            .map(|(k, v)| (Arc::new(k), v))
+            .collect::<HashMap<_, _>>();
+        let table = VirtualTable::from_classes(&Arc::new(classes));
+
+        // Construct reference-counted class name strings
+        let class_object = str_arc(JAVA_LANG_OBJECT);
+        let class_bicycle = str_arc("Test$Bicycle");
+        let class_car = str_arc("Test$Car");
+        let class_van = str_arc("Test$Van");
+        let class_vehicle = str_arc("Test$Vehicle");
+        // Construct reference-counted method name strings
+        let name_get_wheels = str_arc("getWheels");
+        let name_get_speed = str_arc("getSpeed");
+        let name_travel_time = str_arc("travelTime");
+        let name_get_frame_size = str_arc("getFrameSize");
+        let name_is_electric = str_arc("isElectric");
+
+        // Extract virtual class indices and methods
+        let index_object = &table.class_indices[&class_object];
+        let index_bicycle = &table.class_indices[&class_bicycle];
+        let index_car = &table.class_indices[&class_car];
+        let index_van = &table.class_indices[&class_van];
+        let index_vehicle = &table.class_indices[&class_vehicle];
+
+        let methods_object = &table.inheritance_tree[index_object.node].value.methods;
+        let methods_bicycle = &table.inheritance_tree[index_bicycle.node].value.methods;
+        let methods_car = &table.inheritance_tree[index_car.node].value.methods;
+        let methods_van = &table.inheritance_tree[index_van.node].value.methods;
+        let methods_vehicle = &table.inheritance_tree[index_vehicle.node].value.methods;
+
+        // Check virtual class IDs are ordered lexicographically with java/lang/Object first
+        assert_eq!(index_object.id, 0);
+        assert_eq!(index_bicycle.id, 1);
+        assert_eq!(index_car.id, 6);
+        assert_eq!(index_van.id, 11);
+        assert_eq!(index_vehicle.id, 16);
+
+        // Check virtual methods point to correct implementations
+        assert_eq!(methods_object.len(), 0);
+
+        assert_eq!(methods_vehicle.len(), 3);
+        assert_eq!(methods_vehicle[0].name, name_get_wheels);
+        assert_eq!(methods_vehicle[0].class_name, class_vehicle);
+        assert_eq!(methods_vehicle[1].name, name_get_speed);
+        assert_eq!(methods_vehicle[2].name, name_travel_time);
+        assert_eq!(methods_vehicle[2].class_name, class_vehicle);
+
+        assert_eq!(methods_bicycle.len(), 4);
+        assert_eq!(methods_bicycle[0].name, name_get_wheels);
+        assert_eq!(methods_bicycle[0].class_name, class_vehicle);
+        assert_eq!(methods_bicycle[1].name, name_get_speed);
+        assert_eq!(methods_bicycle[1].class_name, class_bicycle);
+        assert_eq!(methods_bicycle[2].name, name_travel_time);
+        assert_eq!(methods_bicycle[2].class_name, class_vehicle);
+        assert_eq!(methods_bicycle[3].name, name_get_frame_size);
+        assert_eq!(methods_bicycle[3].class_name, class_bicycle);
+
+        assert_eq!(methods_car.len(), 4);
+        assert_eq!(methods_car[0].name, name_get_wheels);
+        assert_eq!(methods_car[0].class_name, class_vehicle);
+        assert_eq!(methods_car[1].name, name_get_speed);
+        assert_eq!(methods_car[1].class_name, class_car);
+        assert_eq!(methods_car[2].name, name_travel_time);
+        assert_eq!(methods_car[2].class_name, class_vehicle);
+        assert_eq!(methods_car[3].name, name_is_electric);
+        assert_eq!(methods_car[3].class_name, class_car);
+
+        assert_eq!(methods_van.len(), 4);
+        assert_eq!(methods_van[0].name, name_get_wheels);
+        assert_eq!(methods_van[0].class_name, class_vehicle);
+        assert_eq!(methods_van[1].name, name_get_speed);
+        assert_eq!(methods_van[1].class_name, class_van);
+        assert_eq!(methods_van[2].name, name_travel_time);
+        assert_eq!(methods_van[2].class_name, class_vehicle);
+        assert_eq!(methods_van[3].name, name_is_electric);
+        assert_eq!(methods_van[3].class_name, class_car);
+
+        // Check get_virtual_class_id returns correct value
+        assert_eq!(table.get_virtual_class_id(&class_van), 11);
+
+        // Check get_method_virtual_offset returns correct value
+        let id = MethodId {
+            class_name: class_car,
+            name: name_get_speed,
+            descriptor: Arc::new(MethodDescriptor::new(
+                vec![],
+                ReturnDescriptor::Field(FieldDescriptor::Double),
+            )),
+        };
+        assert_eq!(table.get_method_virtual_offset(&id), 2); // +1 for super_id() function
+
+        Ok(())
+    }
+}

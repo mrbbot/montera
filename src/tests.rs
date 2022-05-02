@@ -9,7 +9,7 @@ use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::{env, fs};
 use wasm_encoder::Export;
 use wasmtime::Engine;
@@ -25,6 +25,11 @@ pub fn cache_path(key: &str) -> PathBuf {
 pub fn sha1_digest(data: &str) -> String {
     let digest = Sha1::digest(data);
     HEXLOWER.encode(&digest)
+}
+
+/// Returns an atomically reference-counted owned string from a borrowed string.
+pub fn str_arc(value: &str) -> Arc<String> {
+    Arc::new(String::from(value))
 }
 
 lazy_static! {
