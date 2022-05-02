@@ -233,3 +233,193 @@ impl LocalInterpretation {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::class::FieldDescriptor;
+    use crate::function::locals::LocalInterpretation;
+    use classfile_parser::code_attribute::Instruction as JVMInstruction;
+    use wasm_encoder::ValType;
+
+    #[test]
+    fn locals_from_static_method() {
+        let params = [FieldDescriptor::Int, FieldDescriptor::Double];
+        let code = [
+            (0, JVMInstruction::Iload0),
+            (1, JVMInstruction::I2d), // Check ignores non-local-referencing instructions
+            (2, JVMInstruction::Dload1),
+            (3, JVMInstruction::Dadd),
+            (4, JVMInstruction::Fload3),
+        ];
+        let locals = LocalInterpretation::from_code(true, &params, &code);
+        let expected_map = hashmap! {
+            (0, ValType::I32) => 0,
+            (1, ValType::F64) => 1,
+            (3, ValType::F32) => 2,
+        };
+        assert_eq!(locals.map, expected_map);
+    }
+
+    #[test]
+    fn locals_from_instance_method() {
+        let params = [
+            FieldDescriptor::Long,
+            FieldDescriptor::Float,
+            FieldDescriptor::Object(String::from("Test")),
+        ];
+        let code = [
+            (0, JVMInstruction::Aload0),
+            (1, JVMInstruction::Lload1),
+            (2, JVMInstruction::Fload3),
+            (3, JVMInstruction::Aload(4)),
+        ];
+        let locals = LocalInterpretation::from_code(false, &params, &code);
+        let expected_map = hashmap! {
+            (0, ValType::I32) => 0, // Implicit this
+            (1, ValType::I64) => 1,
+            (3, ValType::F32) => 2,
+            (4, ValType::I32) => 3,
+        };
+        assert_eq!(locals.map, expected_map);
+    }
+
+    #[test]
+    fn locals_with_slot_reuse() {
+        let params = [FieldDescriptor::Int, FieldDescriptor::Double];
+        let code = [
+            (0, JVMInstruction::Iconst0),
+            (1, JVMInstruction::Istore0),
+            (2, JVMInstruction::Dconst0),
+            (3, JVMInstruction::Dstore1),
+            (4, JVMInstruction::Fconst0),
+            (5, JVMInstruction::Fstore1), // Reusing double's slot for float
+        ];
+        let locals = LocalInterpretation::from_code(true, &params, &code);
+        let expected_map = hashmap! {
+            (0, ValType::I32) => 0,
+            (1, ValType::F64) => 1,
+            (1, ValType::F32) => 2,
+        };
+        assert_eq!(locals.map, expected_map);
+    }
+
+    #[test]
+    fn locals_run_length_append() {
+        let params = [FieldDescriptor::Int];
+        let code = [
+            (0, JVMInstruction::Aload0),
+            (1, JVMInstruction::Iload1),
+            (2, JVMInstruction::Iload2),
+            (3, JVMInstruction::Dload3),
+            (4, JVMInstruction::Dload(4)),
+            (5, JVMInstruction::Dload(5)),
+            (6, JVMInstruction::Aload(6)),
+            (7, JVMInstruction::Iload(7)),
+            (8, JVMInstruction::Lload(8)),
+            (9, JVMInstruction::Fload(9)),
+            (10, JVMInstruction::Fload(10)),
+        ];
+        let locals = LocalInterpretation::from_code(false, &params, &code);
+        let mut expected_rle = vec![
+            (1, ValType::I32), // Ignore implicit this and int parameters
+            (3, ValType::F64),
+            (2, ValType::I32), // Reference (from ALOAD) is an i32 too
+            (1, ValType::I64),
+            (2, ValType::F32),
+        ];
+        assert_eq!(locals.run_length_encode(&[]), expected_rle);
+
+        // Check appended types coalesce
+        let append = [ValType::F32, ValType::I32];
+        expected_rle.pop();
+        expected_rle.push((3, ValType::F32));
+        expected_rle.push((1, ValType::I32));
+        assert_eq!(locals.run_length_encode(&append), expected_rle);
+    }
+
+    #[test]
+    fn locals_from_all_instructions() {
+        fn local_from(instruction: JVMInstruction) -> (u32, ValType) {
+            let locals = LocalInterpretation::from_code(true, &[], &[(0, instruction)]);
+            *locals.map.keys().next().unwrap()
+        }
+
+        // References
+        assert_eq!(local_from(JVMInstruction::Aload0), (0, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Aload1), (1, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Aload2), (2, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Aload3), (3, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Aload(4)), (4, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::AloadWide(4)), (4, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Astore0), (0, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Astore1), (1, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Astore2), (2, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Astore3), (3, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Astore(4)), (4, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::AstoreWide(4)), (4, ValType::I32));
+
+        // Doubles
+        assert_eq!(local_from(JVMInstruction::Dload0), (0, ValType::F64));
+        assert_eq!(local_from(JVMInstruction::Dload1), (1, ValType::F64));
+        assert_eq!(local_from(JVMInstruction::Dload2), (2, ValType::F64));
+        assert_eq!(local_from(JVMInstruction::Dload3), (3, ValType::F64));
+        assert_eq!(local_from(JVMInstruction::Dload(4)), (4, ValType::F64));
+        assert_eq!(local_from(JVMInstruction::DloadWide(4)), (4, ValType::F64));
+        assert_eq!(local_from(JVMInstruction::Dstore0), (0, ValType::F64));
+        assert_eq!(local_from(JVMInstruction::Dstore1), (1, ValType::F64));
+        assert_eq!(local_from(JVMInstruction::Dstore2), (2, ValType::F64));
+        assert_eq!(local_from(JVMInstruction::Dstore3), (3, ValType::F64));
+        assert_eq!(local_from(JVMInstruction::Dstore(4)), (4, ValType::F64));
+        assert_eq!(local_from(JVMInstruction::DstoreWide(4)), (4, ValType::F64));
+
+        // Floats
+        assert_eq!(local_from(JVMInstruction::Fload0), (0, ValType::F32));
+        assert_eq!(local_from(JVMInstruction::Fload1), (1, ValType::F32));
+        assert_eq!(local_from(JVMInstruction::Fload2), (2, ValType::F32));
+        assert_eq!(local_from(JVMInstruction::Fload3), (3, ValType::F32));
+        assert_eq!(local_from(JVMInstruction::Fload(4)), (4, ValType::F32));
+        assert_eq!(local_from(JVMInstruction::FloadWide(4)), (4, ValType::F32));
+        assert_eq!(local_from(JVMInstruction::Fstore0), (0, ValType::F32));
+        assert_eq!(local_from(JVMInstruction::Fstore1), (1, ValType::F32));
+        assert_eq!(local_from(JVMInstruction::Fstore2), (2, ValType::F32));
+        assert_eq!(local_from(JVMInstruction::Fstore3), (3, ValType::F32));
+        assert_eq!(local_from(JVMInstruction::Fstore(4)), (4, ValType::F32));
+        assert_eq!(local_from(JVMInstruction::FstoreWide(4)), (4, ValType::F32));
+
+        // Integers
+        assert_eq!(local_from(JVMInstruction::Iload0), (0, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Iload1), (1, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Iload2), (2, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Iload3), (3, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Iload(4)), (4, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::IloadWide(4)), (4, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Istore0), (0, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Istore1), (1, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Istore2), (2, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Istore3), (3, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::Istore(4)), (4, ValType::I32));
+        assert_eq!(local_from(JVMInstruction::IstoreWide(4)), (4, ValType::I32));
+        assert_eq!(
+            local_from(JVMInstruction::Iinc { index: 5, value: 1 },),
+            (5, ValType::I32)
+        );
+        assert_eq!(
+            local_from(JVMInstruction::IincWide { index: 5, value: 1 },),
+            (5, ValType::I32)
+        );
+
+        // Longs
+        assert_eq!(local_from(JVMInstruction::Lload0), (0, ValType::I64));
+        assert_eq!(local_from(JVMInstruction::Lload1), (1, ValType::I64));
+        assert_eq!(local_from(JVMInstruction::Lload2), (2, ValType::I64));
+        assert_eq!(local_from(JVMInstruction::Lload3), (3, ValType::I64));
+        assert_eq!(local_from(JVMInstruction::Lload(4)), (4, ValType::I64));
+        assert_eq!(local_from(JVMInstruction::LloadWide(4)), (4, ValType::I64));
+        assert_eq!(local_from(JVMInstruction::Lstore0), (0, ValType::I64));
+        assert_eq!(local_from(JVMInstruction::Lstore1), (1, ValType::I64));
+        assert_eq!(local_from(JVMInstruction::Lstore2), (2, ValType::I64));
+        assert_eq!(local_from(JVMInstruction::Lstore3), (3, ValType::I64));
+        assert_eq!(local_from(JVMInstruction::Lstore(4)), (4, ValType::I64));
+        assert_eq!(local_from(JVMInstruction::LstoreWide(4)), (4, ValType::I64));
+    }
+}
