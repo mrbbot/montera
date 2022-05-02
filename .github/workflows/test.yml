@@ -19,7 +19,5 @@ jobs:
           distribution: "adopt"
           java-version: "11"
       - uses: ts-graphviz/setup-graphviz@v1  # `dot` is required by tests
-      - name: Build
-        run: cargo build --verbose
       - name: Test
         run: cargo test --verbose
