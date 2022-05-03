@@ -52,7 +52,6 @@ impl ControlFlowGraph {
                 let n = self
                     .iter_id()
                     .filter(|&i| idom[i] == m && self[i].in_degree() >= 2)
-                    // TODO: add test for this comparison: do with nested if and while triggers
                     // Look for "lowest" node in graph
                     .max_by(|&a, &b| post_order.cmp(a, b).reverse());
                 match n {

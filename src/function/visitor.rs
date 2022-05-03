@@ -332,8 +332,16 @@ impl Visitor {
             JVMInstruction::Lor => out.push(I(WASMInstruction::I64Or)),
             JVMInstruction::Lrem => out.push(I(WASMInstruction::I64RemS)),
             JVMInstruction::Lreturn => out.push(I(WASMInstruction::Return)),
-            JVMInstruction::Lshl => out.push(I(WASMInstruction::I64Shl)),
-            JVMInstruction::Lshr => out.push(I(WASMInstruction::I64ShrS)),
+            JVMInstruction::Lshl => {
+                // JVM requires second operand (top of stack) is int, but WebAssembly requires i64
+                out.push(I(WASMInstruction::I64ExtendI32S));
+                out.push(I(WASMInstruction::I64Shl))
+            }
+            JVMInstruction::Lshr => {
+                // JVM requires second operand (top of stack) is int, but WebAssembly requires i64
+                out.push(I(WASMInstruction::I64ExtendI32S));
+                out.push(I(WASMInstruction::I64ShrS))
+            }
             JVMInstruction::Lstore(n) => locals.set(out, ValType::I64, *n as u32),
             JVMInstruction::LstoreWide(n) => locals.set(out, ValType::I64, *n as u32),
             JVMInstruction::Lstore0 => locals.set(out, ValType::I64, 0),
@@ -341,7 +349,11 @@ impl Visitor {
             JVMInstruction::Lstore2 => locals.set(out, ValType::I64, 2),
             JVMInstruction::Lstore3 => locals.set(out, ValType::I64, 3),
             JVMInstruction::Lsub => out.push(I(WASMInstruction::I64Sub)),
-            JVMInstruction::Lushr => out.push(I(WASMInstruction::I64ShrU)),
+            JVMInstruction::Lushr => {
+                // JVM requires second operand (top of stack) is int, but WebAssembly requires i64
+                out.push(I(WASMInstruction::I64ExtendI32S));
+                out.push(I(WASMInstruction::I64ShrU))
+            }
             JVMInstruction::Lxor => out.push(I(WASMInstruction::I64Xor)),
             JVMInstruction::Monitorenter => {
                 bail!("Monitorenter instruction unimplemented (Monitor)")

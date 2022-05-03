@@ -126,6 +126,11 @@ impl CompiledFunction {
         self.flags.contains(MethodAccessFlags::NATIVE)
     }
 
+    /// Returns `true` if and only if this is an `abstract` function, without an implementation.
+    pub fn is_abstract(&self) -> bool {
+        self.flags.contains(MethodAccessFlags::ABSTRACT)
+    }
+
     /// Returns `true` if and only if this is a `static` function, without an implicit `this`
     /// parameter.
     pub fn is_static(&self) -> bool {

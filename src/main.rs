@@ -37,7 +37,7 @@ use std::{fs, panic};
 
 /// Queues jobs to load and parse all classes at `input_paths`, returning a channel to receive
 /// parsed [`Class`]es on. See [`LoadClassJob`] for more details.
-fn load_classes(
+pub fn load_classes(
     schd: &impl Scheduler,
     input_paths: Vec<PathBuf>,
 ) -> Receiver<anyhow::Result<Class>> {
@@ -54,7 +54,7 @@ fn load_classes(
 }
 
 /// Creates a directory (and all parents) for a function's intermediate graphs.
-fn create_graphs_dir(
+pub fn create_graphs_dir(
     graphs_root_dir: Option<&PathBuf>,
     function: &Function,
 ) -> anyhow::Result<Option<PathBuf>> {
@@ -71,7 +71,7 @@ fn create_graphs_dir(
 /// number of functions, and a channel to receive [`CompiledFunction`]s on. If `graphs_root_dir`
 /// is specified, intermediate structuring graphs will be rendered. See [`CompileFunctionJob`] for
 /// more details.
-fn compile_functions<'a>(
+pub fn compile_functions<'a>(
     schd: &impl Scheduler,
     graphs_root_dir: Option<&PathBuf>,
     class_count: usize,
@@ -119,7 +119,7 @@ fn compile_functions<'a>(
 
 /// Constructs a reference-counted virtual method table from a set of parsed classes. If
 /// `graphs_root_dir` is specified, the virtual table's inheritance tree will be rendered.
-fn construct_virtual_table(
+pub fn construct_virtual_table(
     graphs_root_dir: Option<&PathBuf>,
     classes: &Arc<HashMap<Arc<String>, Class>>,
 ) -> anyhow::Result<Rc<VirtualTable>> {
@@ -134,7 +134,7 @@ fn construct_virtual_table(
 }
 
 /// Waits for the results of all function compilations, storing them in a single `Vec`.
-fn collect_functions(
+pub fn collect_functions(
     function_count: usize,
     function_rx: Receiver<anyhow::Result<CompiledFunction>>,
 ) -> anyhow::Result<Vec<CompiledFunction>> {
@@ -148,7 +148,7 @@ fn collect_functions(
 
 /// Performs the rendering phase of WebAssembly generation, lowering all pseudo-instructions to real
 /// WebAssembly instructions using program wide information. See [`Renderer`] for more details.
-fn render_module(
+pub fn render_module(
     classes: Arc<HashMap<Arc<String>, Class>>,
     virtual_table: Rc<VirtualTable>,
     functions: Vec<CompiledFunction>,
@@ -167,7 +167,7 @@ fn render_module(
 }
 
 /// Writes a WebAssembly module's bytes to disk, in both the binary `.wasm` and text `.wat` formats.
-fn write_module(
+pub fn write_module(
     output_path: &PathBuf,
     wasm: &[u8],
     wasm_ext: &str,
@@ -180,7 +180,7 @@ fn write_module(
 }
 
 /// Optimises a binary WebAssembly module using [Binaryen](https://github.com/WebAssembly/binaryen).
-fn optimise_module(wasm: &[u8]) -> anyhow::Result<Vec<u8>> {
+pub fn optimise_module(wasm: &[u8]) -> anyhow::Result<Vec<u8>> {
     info!("Optimising WebAssembly module...");
     // Optimise module using Binaryen, note this doesn't tell us what went wrong yet, see:
     // https://github.com/pepyakin/binaryen-rs/blob/5b5e4778c29fd609e7ec16956599d9bc2d2f182a/binaryen-sys/Shim.cpp#L29

@@ -83,12 +83,67 @@ impl Scheduler for WorkerScheduler {
 }
 
 /// Schedules jobs immediately on the current thread, executing jobs in serial.
-#[cfg(not(feature = "parallel_scheduler"))]
+#[cfg(any(not(feature = "parallel_scheduler"), test))]
 pub struct SerialScheduler;
 
-#[cfg(not(feature = "parallel_scheduler"))]
+#[cfg(any(not(feature = "parallel_scheduler"), test))]
 impl Scheduler for SerialScheduler {
     fn schedule(&self, job: Box<dyn Job>) {
         job.process();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::scheduler::{Job, SerialScheduler, WorkerScheduler};
+    use crate::Scheduler;
+    use std::sync::mpsc::{channel, Sender};
+    use std::thread::sleep;
+    use std::time::Duration;
+
+    struct TestJob {
+        result: u64,
+        result_tx: Sender<u64>,
+    }
+
+    impl TestJob {
+        pub fn new(result: u64, result_tx: &Sender<u64>) -> Self {
+            Self {
+                result,
+                result_tx: result_tx.clone(),
+            }
+        }
+    }
+
+    impl Job for TestJob {
+        fn process(&self) {
+            sleep(Duration::from_millis(self.result));
+            self.result_tx.send(self.result).unwrap();
+        }
+    }
+
+    fn test_scheduler(schd: Box<dyn Scheduler>) {
+        let (result_tx, result_rx) = channel();
+        let job1 = TestJob::new(0, &result_tx);
+        let job2 = TestJob::new(250, &result_tx);
+        let job3 = TestJob::new(500, &result_tx);
+        drop(result_tx);
+
+        schd.schedule(Box::new(job1));
+        schd.schedule(Box::new(job2));
+        schd.schedule(Box::new(job3));
+
+        let results = result_rx.into_iter().collect::<Vec<_>>();
+        assert_eq!(results, [0, 250, 500]);
+    }
+
+    #[test]
+    fn worker_scheduler() {
+        test_scheduler(Box::new(WorkerScheduler::new(4)))
+    }
+
+    #[test]
+    fn serial_scheduler() {
+        test_scheduler(Box::new(SerialScheduler {}))
     }
 }

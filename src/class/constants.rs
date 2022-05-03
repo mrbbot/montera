@@ -35,7 +35,7 @@ pub enum Constant {
 /// Machine Specification.
 ///
 /// Whilst the [`classfile_parser`] crate already provides excellent constant pool parsing, there
-/// are a several issues:
+/// are several issues:
 ///
 /// - String constants are stored as owned [`String`]s which cannot be cloned without allocating
 /// - Variants for high-level compound constants store indices into the pool, meaning for field/
@@ -138,7 +138,7 @@ impl ConstantPool {
         let inner = RwLock::new(vec![Constant::Unusable; const_pool.len() + 1]);
         let pool = Self { inner };
 
-        // First load simple value constants (utf8, integer, float, long)
+        // First load simple value constants (utf8, integer, float, long, double)
         for (i, info) in const_pool.iter_mut().enumerate() {
             let i = i + 1;
             match info {
@@ -177,7 +177,7 @@ impl ConstantPool {
             }
         }
 
-        // Finally load constants pointing to classes (method, field)
+        // Finally load constants pointing to classes (field, method)
         for (i, info) in const_pool.iter().enumerate() {
             let i = i + 1;
             match info {

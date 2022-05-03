@@ -1,4 +1,4 @@
-//! Collections exploiting NodeId's integer representation and the (mostly) fixed size of graphs
+//! Collections exploiting [`NodeId`]'s integer representation and the (mostly) fixed size of graphs
 
 use crate::graph::{Graph, NodeId};
 use bit_set::BitSet;

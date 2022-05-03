@@ -121,7 +121,6 @@ impl ControlFlowGraph {
                     assert!(reverse_post_order.cmp(h_j, x).is_ge());
 
                     // Mark nodes in this loop
-                    // TODO: extract this out into function
                     let I_j = I_j_derived
                         .iter()
                         .flat_map(|&derived| G_i[derived].value.iter())

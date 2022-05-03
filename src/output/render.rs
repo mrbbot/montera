@@ -88,6 +88,23 @@ impl Renderer {
         out.imports.import("imports", Some(&name), import_type);
     }
 
+    /// Renders an abstract function (without an implementation) to WebAssembly as an `unreachable`.
+    fn render_abstract(&self, out: &mut Module, func: CompiledFunction) {
+        // Static functions cannot be abstract
+        assert!(!func.is_static());
+
+        // Create unreachable function with no locals
+        let mut f = WASMFunction::new(vec![]);
+        f.instruction(&WASMInstruction::Unreachable)
+            .instruction(&WASMInstruction::End);
+
+        // Render function to module
+        let func_type = Arc::new(func.descriptor.function_type.with_implicit_this());
+        let type_index = out.ensure_type(&func_type);
+        out.functions.function(type_index);
+        out.codes.function(&f);
+    }
+
     /// Computes the total size of the named class's fields, including subclasses' and the virtual
     /// class ID.
     fn get_class_size<'a>(&'a self, mut class_name: &'a Arc<String>) -> i32 {
@@ -225,7 +242,6 @@ impl Renderer {
                     // currently translate to unreachable). Therefore, just nop here.
                     f.instruction(&WASMInstruction::Nop)
                 } else {
-                    // TODO: check if we need to look at subclasses
                     let index = self.function_indices[&id];
                     f.instruction(&WASMInstruction::Call(index))
                 }
@@ -322,6 +338,8 @@ impl Renderer {
         for func in take(&mut self.functions) {
             if func.is_import() {
                 self.render_import(out, func);
+            } else if func.is_abstract() {
+                self.render_abstract(out, func);
             } else {
                 self.render_function(out, func);
             }

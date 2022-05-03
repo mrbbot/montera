@@ -75,12 +75,16 @@ macro_rules! match_branches {
         Conditional($cond_target:ident) => $cond_branch:block,
     }) => {
         match $instruction {
-            JVMInstruction::IfIcmpeq(n)
+            JVMInstruction::IfAcmpeq(n)
+            | JVMInstruction::IfAcmpne(n)
+            | JVMInstruction::IfIcmpeq(n)
             | JVMInstruction::IfIcmpne(n)
             | JVMInstruction::IfIcmplt(n)
             | JVMInstruction::IfIcmpge(n)
             | JVMInstruction::IfIcmpgt(n)
             | JVMInstruction::IfIcmple(n)
+            | JVMInstruction::Ifnull(n)
+            | JVMInstruction::Ifnonnull(n)
             | JVMInstruction::Ifeq(n)
             | JVMInstruction::Ifne(n)
             | JVMInstruction::Iflt(n)

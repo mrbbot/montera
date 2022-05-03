@@ -3,12 +3,16 @@
 use crate::class::load_class;
 use crate::function::structure::ControlFlowGraph;
 use crate::output::BuiltinFunction;
-use crate::{Class, Module};
+use crate::scheduler::SerialScheduler;
+use crate::{
+    collect_functions, compile_functions, construct_virtual_table, render_module, Class, Module,
+};
 use data_encoding::HEXLOWER;
 use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 use std::{env, fs};
 use wasm_encoder::Export;
@@ -34,10 +38,6 @@ pub fn str_arc(value: &str) -> Arc<String> {
 
 lazy_static! {
     static ref JAVAC_MUTEX: Mutex<()> = Mutex::new(());
-}
-
-lazy_static! {
-    pub static ref WASM_ENGINE: Engine = Engine::default();
 }
 
 /// Compiles, loads and parses Java code, returning a map of class names to parsed classes.
@@ -132,6 +132,10 @@ pub fn load_basic_blocks(code: &str) -> anyhow::Result<ControlFlowGraph> {
     Ok(g)
 }
 
+lazy_static! {
+    pub static ref WASM_ENGINE: Engine = Engine::default();
+}
+
 /// Constructs a WebAssembly module exporting the specified built-in functions.
 pub fn construct_builtin_module(builtins: &[BuiltinFunction]) -> Module {
     let mut module = Module::new();
@@ -145,4 +149,43 @@ pub fn construct_builtin_module(builtins: &[BuiltinFunction]) -> Module {
     }
     module.render_ensured_functions_queue();
     module
+}
+
+/// Compiles, loads and parses Java code, then compiles it to WebAssembly, returning a module.
+///
+/// Compilation will be cached. `code` may include methods or fields and will be placed inside the
+/// following template:
+///
+/// ```java
+/// public class Test {
+///     // `code` goes here
+/// }
+/// ```
+pub fn construct_code_module(code: &str) -> anyhow::Result<Module> {
+    // Load classes from code
+    let classes = load_many_code(code)?;
+    let class_count = classes.len();
+    // Move from HashMap to channel so we can use the main entrypoint's functions
+    let (class_tx, class_rx) = channel();
+    for (_, class) in classes.into_iter() {
+        class_tx.send(Ok(class))?;
+    }
+    drop(class_tx);
+
+    // Compile all functions
+    let schd = SerialScheduler {};
+    let (classes, function_count, function_rx) =
+        compile_functions(&schd, None, class_count, class_rx)?;
+
+    // Construct virtual method table containing virtual class and method IDs
+    let classes = Arc::new(classes);
+    let virtual_table = construct_virtual_table(None, &classes)?;
+
+    // Collect function compilation results
+    let functions = collect_functions(function_count, function_rx)?;
+
+    // Render functions and virtual table to WebAssembly module
+    let module = render_module(classes, virtual_table, functions);
+
+    Ok(module)
 }
