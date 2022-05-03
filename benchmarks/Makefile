@@ -1,5 +1,3 @@
-JAVA_HOME=/usr/local/Cellar/openjdk@11/11.0.12
-
 SRC_CHEERPJ=src/cheerpj
 cheerpj_clean:
 	rm -rf $(SRC_CHEERPJ)/out
@@ -40,10 +38,10 @@ montera_clean:
 	rm -rf $(SRC_MONTERA)/{out-class,out-wasm}
 montera_build:
 	javac -d $(SRC_MONTERA)/out-class $(SRC_MONTERA)/*.java
-	RUST_LOG=info montera --optimise --output $(SRC_MONTERA)/out-wasm/mod.wasm $(SRC_MONTERA)/out-class/*.class
+	RUST_LOG=info ../target/release/montera --optimise --output $(SRC_MONTERA)/out-wasm/mod.wasm $(SRC_MONTERA)/out-class/*.class
 
 SRC_TEAVM=src/teavm
 teavm_clean:
-	cd $(SRC_TEAVM); JAVA_HOME=$(JAVA_HOME) mvn clean
+	cd $(SRC_TEAVM); mvn clean
 teavm_build:
-	cd $(SRC_TEAVM); JAVA_HOME=$(JAVA_HOME) mvn package
+	cd $(SRC_TEAVM); mvn package
