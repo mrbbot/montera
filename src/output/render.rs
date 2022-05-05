@@ -279,6 +279,16 @@ impl Renderer {
                 f.instruction(&WASMInstruction::I32Const(nan_greater))
                     .instruction(&WASMInstruction::Call(double_cmp_index))
             }
+            // Pops two `float` values `a` and `b` off the top of the stack, returning `a % b`.
+            Instruction::FloatRem => {
+                let float_rem_index = out.ensure_builtin_function(BuiltinFunction::FloatRem);
+                f.instruction(&WASMInstruction::Call(float_rem_index))
+            }
+            // Pops two `double` values `a` and `b` off the top of the stack, returning `a % b`.
+            Instruction::DoubleRem => {
+                let double_rem_index = out.ensure_builtin_function(BuiltinFunction::DoubleRem);
+                f.instruction(&WASMInstruction::Call(double_rem_index))
+            }
         };
     }
 

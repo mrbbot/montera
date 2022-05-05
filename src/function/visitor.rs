@@ -89,7 +89,7 @@ impl Visitor {
             JVMInstruction::Dload3 => locals.get(out, ValType::F64, 3),
             JVMInstruction::Dmul => out.push(I(WASMInstruction::F64Mul)),
             JVMInstruction::Dneg => out.push(I(WASMInstruction::F64Neg)),
-            JVMInstruction::Drem => bail!("Drem instruction unimplemented"), // TODO: implement
+            JVMInstruction::Drem => out.push(Instruction::DoubleRem),
             JVMInstruction::Dreturn => out.push(I(WASMInstruction::Return)),
             JVMInstruction::Dstore(n) => locals.set(out, ValType::F64, *n as u32),
             JVMInstruction::DstoreWide(n) => locals.set(out, ValType::F64, *n as u32),
@@ -136,7 +136,7 @@ impl Visitor {
             JVMInstruction::Fload3 => locals.get(out, ValType::F32, 3),
             JVMInstruction::Fmul => out.push(I(WASMInstruction::F32Mul)),
             JVMInstruction::Fneg => out.push(I(WASMInstruction::F32Neg)),
-            JVMInstruction::Frem => bail!("Frem instruction unimplemented"), // TODO: implement
+            JVMInstruction::Frem => out.push(Instruction::FloatRem),
             JVMInstruction::Freturn => out.push(I(WASMInstruction::Return)),
             JVMInstruction::Fstore(n) => locals.set(out, ValType::F32, *n as u32),
             JVMInstruction::FstoreWide(n) => locals.set(out, ValType::F32, *n as u32),

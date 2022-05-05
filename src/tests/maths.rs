@@ -85,6 +85,10 @@ macro_rules! assert_float {
             &mut $store,
             concat!("Test.", $name, "div(", $desc, $desc, ")", $desc),
         )?;
+        let rem = $instance.get_typed_func::<($ty, $ty), $ty, _>(
+            &mut $store,
+            concat!("Test.", $name, "rem(", $desc, $desc, ")", $desc),
+        )?;
         let neg = $instance.get_typed_func::<$ty, $ty, _>(
             &mut $store,
             concat!("Test.", $name, "neg(", $desc, ")", $desc),
@@ -94,14 +98,15 @@ macro_rules! assert_float {
         assert_eq!(sub.call(&mut $store, (3.75, 2.5))?, 1.25);
         assert_eq!(mul.call(&mut $store, (2.5, 3.0))?, 7.5);
         assert_eq!(div.call(&mut $store, (7.5, 2.5))?, 3.0);
+        assert_eq!(rem.call(&mut $store, (7.5, 2.0))?, 1.5);
         assert_eq!(neg.call(&mut $store, 5.5)?, -5.5);
     };
 }
 
 /// IADD, ISUB, IMUL, IDIV, IREM, INEG, ISHL, ISHR, IUSHR, IAND, IOR, IXOR,
 /// LADD, LSUB, LMUL, LDIV, LREM, LNEG, LSHL, LSHR, LUSHR, LAND, LOR, LXOR,
-/// FADD, FSUB, FMUL, FDIV, FNEG,
-/// DADD, DSUB, DMUL, DDIV, DNEG,
+/// FADD, FSUB, FMUL, FDIV, FREM, FNEG,
+/// DADD, DSUB, DMUL, DDIV, DREM, DNEG,
 /// IINC, IINC_WIDE
 #[test]
 fn maths() -> anyhow::Result<()> {
@@ -136,12 +141,14 @@ fn maths() -> anyhow::Result<()> {
         public static float fsub(float a, float b) { return a - b; }
         public static float fmul(float a, float b) { return a * b; }
         public static float fdiv(float a, float b) { return a / b; }
+        public static float frem(float a, float b) { return a % b; }
         public static float fneg(float a) { return -a; }
  
         public static double dadd(double a, double b) { return a + b; }
         public static double dsub(double a, double b) { return a - b; }
         public static double dmul(double a, double b) { return a * b; }
         public static double ddiv(double a, double b) { return a / b; }
+        public static double drem(double a, double b) { return a % b; }
         public static double dneg(double a) { return -a; }
         
         public static int iinc(int a) { a += 1; return a; }

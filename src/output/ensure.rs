@@ -1,6 +1,6 @@
 use crate::class::FunctionType;
 use crate::output::builtin::{
-    construct_allocate, construct_compare, construct_instanceof, BuiltinFunction,
+    construct_allocate, construct_compare, construct_instanceof, construct_rem, BuiltinFunction,
 };
 use crate::output::types::EnsuredFunction;
 use crate::output::Module;
@@ -221,6 +221,8 @@ impl Module {
                     BuiltinFunction::LongCmp => construct_compare(ValType::I64),
                     BuiltinFunction::FloatCmp => construct_compare(ValType::F32),
                     BuiltinFunction::DoubleCmp => construct_compare(ValType::F64),
+                    BuiltinFunction::FloatRem => construct_rem(ValType::F32),
+                    BuiltinFunction::DoubleRem => construct_rem(ValType::F64),
                 };
 
                 // Get type of constructed function

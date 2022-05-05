@@ -1,10 +1,13 @@
 mod allocate;
 mod compare;
 mod instanceof;
+mod number;
+mod rem;
 
 pub use self::allocate::*;
 pub use self::compare::*;
 pub use self::instanceof::*;
+pub use self::rem::*;
 
 /// Possible built-in functions for high-level JVM instructions that are not supported by
 /// WebAssembly. These will be included once in the module only if required.
@@ -26,6 +29,13 @@ pub enum BuiltinFunction {
     /// See [`compare::construct_compare`] for more details.
     /// `[a: f64, b: f64, nan_greater: i32] -> [ord: i32]`
     DoubleCmp,
+
+    /// See [`rem::construct_rem`] for more details.
+    /// `[a: f32, b: f32] -> [c: f32]`
+    FloatRem,
+    /// See [`rem::construct_rem`] for more details.
+    /// `[a: f64, b: f64] -> [c: f64]`
+    DoubleRem,
 }
 
 impl BuiltinFunction {
@@ -37,6 +47,8 @@ impl BuiltinFunction {
             BuiltinFunction::LongCmp => "!LongCmp",
             BuiltinFunction::FloatCmp => "!FloatCmp",
             BuiltinFunction::DoubleCmp => "!DoubleCmp",
+            BuiltinFunction::FloatRem => "!FloatRem",
+            BuiltinFunction::DoubleRem => "!DoubleRem",
         }
     }
 }

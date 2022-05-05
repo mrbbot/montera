@@ -75,6 +75,13 @@ pub enum Instruction<'a> {
     /// specified [`NaNBehaviour`]:
     /// `[a: f64, b: f64] -> [ord: i32]`
     DoubleCmp(NaNBehaviour),
+
+    /// Pops two `float` values `a` and `b` off the top of the stack, returning `a % b`.
+    /// `[a: f32, b: f32] -> [c: f32]`
+    FloatRem,
+    /// Pops two `double` values `a` and `b` off the top of the stack, returning `a % b`.
+    /// `[a: f64, b: f64] -> [c: f64]`
+    DoubleRem,
 }
 
 /// Controls what `Instruction::FloatCmp` or `Instruction::DoubleCmp` should return if either of
