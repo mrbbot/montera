@@ -59,13 +59,9 @@ async function runBrowserBenchmarks(path) {
     const gcdTime = performance.now() - gcdStart;
 
     // Calculate the sum of all {i, i+1, i+2}s for natural i's up to 4000
-    // (sum isn't yet implemented for handwritten WebAssembly)
-    let sumTime = 0;
-    if (window.sum) {
-      const sumStart = performance.now();
-      for (let i = 1; i < 4000; i++) window.sum(i, i + 1, i + 2);
-      sumTime = performance.now() - sumStart;
-    }
+    const sumStart = performance.now();
+    for (let i = 1; i < 4000; i++) window.sum(i, i + 1, i + 2);
+    const sumTime = performance.now() - sumStart;
 
     return { fibTime, gcdTime, sumTime };
   });
