@@ -1,8 +1,5 @@
-package dev.mrbbot.client;
+package dev.benchmark;
 
-import jsinterop.annotations.JsType;
-
-@JsType
 public class Objects {
     public static class Pair {
         private final int a;

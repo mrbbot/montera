@@ -8,7 +8,7 @@
   <!-- Servlets -->
   <servlet>
     <servlet-name>greetServlet</servlet-name>
-    <servlet-class>dev.mrbbot.server.GreetingServiceImpl</servlet-class>
+    <servlet-class>dev.benchmark.server.GreetingServiceImpl</servlet-class>
   </servlet>
   
   <servlet-mapping>

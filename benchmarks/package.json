@@ -1,7 +1,7 @@
 {
   "name": "benchmarks",
   "version": "1.0.0",
-  "author": "MrBBot <me@mrbbot.dev>",
+  "author": "benchmark <me@benchmark.dev>",
   "license": "MIT",
   "type": "module",
   "scripts": {

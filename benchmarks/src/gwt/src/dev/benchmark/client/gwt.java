@@ -1,4 +1,4 @@
-package dev.mrbbot.client;
+package dev.benchmark.client;
 
 import com.google.gwt.core.client.EntryPoint;
 

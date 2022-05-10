@@ -46,7 +46,7 @@
       <arg value="war"/>
       <!-- Additional arguments like -style PRETTY or -logLevel DEBUG -->
       <arg line="${gwt.args}"/>
-      <arg value="dev.mrbbot.gwt"/>
+      <arg value="dev.benchmark.gwt"/>
     </java>
   </target>
 
@@ -63,8 +63,8 @@
       <arg value="war"/>
       <!-- Additional arguments like -style PRETTY, -logLevel DEBUG or -nosuperDevMode -->
       <arg line="${gwt.args}"/>
-      <arg value="dev.mrbbot.gwt"/>
-      <arg value="dev.mrbbot.gwt"/>
+      <arg value="dev.benchmark.gwt"/>
+      <arg value="dev.benchmark.gwt"/>
     </java>
   </target>
 

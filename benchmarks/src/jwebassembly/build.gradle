@@ -13,7 +13,7 @@ plugins {
 
 apply plugin: 'de.inetsoftware.jwebassembly'
 
-group 'dev.mrbbot'
+group 'dev.benchmark'
 version '1.0-SNAPSHOT'
 
 repositories {

@@ -1,4 +1,4 @@
-package dev.mrbbot;
+package dev.benchmark;
 
 public class Fib {
     public static int fib(int n) {
