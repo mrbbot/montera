@@ -34,6 +34,8 @@ To run benchmarks, make sure:
 - [Node.js 16 LTS](https://nodejs.org/en/) is installed
 - [Python 3](https://www.python.org/) is installed
 - [OpenJDK 7 to 11](https://openjdk.java.net/) is installed, with the `javac` executable in the system `PATH`, and `JAVA_HOME` pointing to the installation
+- [Ant 1.10](https://ant.apache.org/) is installed
+- [Maven 3.8](https://maven.apache.org/) is installed
 - [CheerpJ 2.2](https://leaningtech.com/download-cheerpj/) is installed in `benchmarks/sdks/cheerpj-2.2`
 - [GWT 2.9.0](https://www.gwtproject.org/download.html) is installed in `benchmarks/sdks/gwt-2.9.0`
 
@@ -43,6 +45,7 @@ To run benchmarks, make sure:
 $ cargo build --release  # Build project for benchmarking
 $ export JAVA_HOME=/usr/local/Cellar/openjdk@11/11.0.12  # e.g. Java 11 installed using `brew` on macOS
 $ cd benchmarks
+$ mkdir -p data                    # Create data output directory
 
 $ npm install                      # Install Node.js dependencies
 $ npm run bench:build              # Run compilation time benchmark
