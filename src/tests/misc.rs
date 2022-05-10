@@ -93,7 +93,7 @@ fn proposal_examples() -> anyhow::Result<()> {
                     a = tmp;
                 }
                 assert a == 9;
-              }
+            }
         }
 
         // fib

@@ -5,7 +5,7 @@ set -e
 
 cloc ./benchmarks/{plots,scripts,Makefile} ./src ./Cargo.toml --json | jq -c '{ files: .SUM.nFiles, lines: [.SUM.code, .SUM.comment] | add }'
 
-printf 'benchmarks: '
+printf './benchmarks: '
 cloc ./benchmarks/{plots,scripts,Makefile} --json | jq -c '{ files: .SUM.nFiles, lines: [.SUM.code, .SUM.comment] | add }'
 
 ENTRIES=(
@@ -22,6 +22,7 @@ ENTRIES=(
   "./src/graph"
   "./src/output"
   "./src/output/builtin"
+  "./src/tests"
   "./src/virtuals"
   "./src/main.rs"
   "./src/options.rs"

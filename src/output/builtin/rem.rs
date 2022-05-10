@@ -85,7 +85,7 @@ pub fn construct_rem(t: ValType) -> (FunctionType, WASMFunction) {
         .instruction(&WASMInstruction::Return)
         .instruction(&WASMInstruction::End);
 
-    // 6. Otherwise, the result is a-(b*q) where q is the integer with |q| <= |a/b|
+    // 6. Otherwise, the result is a-(b*q) where q is the max integer with |q| <= |a/b|
     f.instruction(&WASMInstruction::LocalGet(/* a */ 0))
         .instruction(&WASMInstruction::LocalGet(/* a */ 0))
         .instruction(&WASMInstruction::LocalGet(/* b */ 1))
